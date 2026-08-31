@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { CuttingPlan, JobInput } from '../lib/types'
 import { downloadPlanPdf } from '../lib/pdf'
+import { tubesWord } from '../lib/ru'
+import type { CuttingPlan, JobInput } from '../lib/types'
 
 type Props = {
   plan: CuttingPlan
@@ -21,48 +22,46 @@ export function PlanCard({ plan, input }: Props) {
     }
   }
 
+  const remnantRows = plan.patterns
+    .map((pattern, index) => ({ pattern, index }))
+    .filter(({ pattern }) => pattern.remnant > 0)
+
   return (
-    <section className="card plan highlight">
+    <section className="card plan">
       <div className="plan-head">
         <div>
-          <h2>{plan.title}</h2>
-          <p className="muted">{plan.description}</p>
+          <p className="hero-mark" style={{ marginBottom: 6 }}>
+            Результат
+          </p>
+          <h2>{plan.title || `Раскрой Ø${input.pipeDiameter} трубы`}</h2>
         </div>
         <button type="button" className="secondary" onClick={onPdf} disabled={pdfBusy}>
-          {pdfBusy ? 'Готовим PDF…' : 'Скачать PDF'}
+          {pdfBusy ? 'PDF…' : 'Скачать PDF'}
         </button>
       </div>
 
-      <div className="stats">
-        <div className="stat">
-          <span className="stat-label">Труб купить</span>
-          <strong className="stat-value">{plan.barsCount}</strong>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Типов схем</span>
-          <strong className="stat-value">{plan.patterns.length}</strong>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Пары / одиночные</span>
-          <strong className="stat-value">
-            {plan.pairCount} / {plan.singleCount}
-          </strong>
-        </div>
-        <div className="stat">
-          <span className="stat-label">Отход</span>
-          <strong className="stat-value">{plan.wastePercent.toFixed(1)}%</strong>
-        </div>
+      <div className="tube-count">
+        <span>Количество труб</span>
+        <strong>{plan.barsCount}</strong>
+        <span>шт</span>
       </div>
 
-      {plan.warnings.length > 0 && (
-        <ul className="warnings">
-          {plan.warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
-          ))}
-        </ul>
-      )}
+      <h3 className="section-title">Схемы раскроя</h3>
+      <div className="legend">
+        <span>
+          <i className="l-single" /> одиночная
+        </span>
+        <span>
+          <i className="l-pair" /> конус в конусе
+        </span>
+        <span>
+          <i className="l-plate" /> пластина
+        </span>
+        <span>
+          <i className="l-rem" /> остаток
+        </span>
+      </div>
 
-      <h3>Схемы раскроя</h3>
       <div className="bars">
         {plan.patterns.map((pattern, patternIndex) => {
           const usedPct = (pattern.used / input.stockLength) * 100
@@ -70,7 +69,7 @@ export function PlanCard({ plan, input }: Props) {
             <div key={pattern.signature} className="bar-row">
               <div className="bar-meta">
                 <strong>
-                  Схема {patternIndex + 1} × {pattern.count} шт
+                  Схема {patternIndex + 1} — {pattern.count} {tubesWord(pattern.count)}
                 </strong>
                 <span>
                   {pattern.used} мм · остаток {pattern.remnant} мм
@@ -82,7 +81,7 @@ export function PlanCard({ plan, input }: Props) {
                   return (
                     <div
                       key={`${pattern.signature}-${idx}`}
-                      className={`segment ${block.kind}`}
+                      className={`segment ${block.role === 'plate' ? 'plate' : block.kind}`}
                       style={{ width: `${widthPct}%` }}
                       title={`${block.label} → ${block.consumed} мм`}
                     >
@@ -98,43 +97,31 @@ export function PlanCard({ plan, input }: Props) {
                   />
                 )}
               </div>
-              <ol className="block-list">
-                {pattern.blocks.map((block, idx) => (
-                  <li key={`${pattern.signature}-list-${idx}`}>
-                    {block.kind === 'pair' ? 'Пара' : 'Одиночная'}: {block.label} →{' '}
-                    {block.consumed} мм
-                    {input.kerf > 0 ? ` + пропил ${input.kerf} мм` : ''}
-                  </li>
-                ))}
-              </ol>
             </div>
           )
         })}
       </div>
 
-      <h3>Таблица остатков по схемам</h3>
-      {plan.patterns.every((pattern) => pattern.remnant === 0) ? (
+      <h3 className="section-title">Остатки по схемам</h3>
+      {remnantRows.length === 0 ? (
         <p className="muted">Остатков нет.</p>
       ) : (
         <table className="remnants">
           <thead>
             <tr>
               <th>Схема</th>
-              <th>Кол-во труб</th>
+              <th>Труб, шт</th>
               <th>Остаток, мм</th>
             </tr>
           </thead>
           <tbody>
-            {plan.patterns
-              .map((pattern, index) => ({ pattern, index }))
-              .filter(({ pattern }) => pattern.remnant > 0)
-              .map(({ pattern, index }) => (
-                <tr key={`rem-${pattern.signature}`}>
-                  <td>{index + 1}</td>
-                  <td>{pattern.count}</td>
-                  <td>{pattern.remnant}</td>
-                </tr>
-              ))}
+            {remnantRows.map(({ pattern, index }) => (
+              <tr key={`rem-${pattern.signature}`}>
+                <td>{index + 1}</td>
+                <td>{pattern.count}</td>
+                <td>{pattern.remnant}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

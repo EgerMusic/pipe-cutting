@@ -1,3 +1,4 @@
+import { platesPerSegment } from '../lib/types'
 import type { JobInput, PieceDemand } from '../lib/types'
 
 type Props = {
@@ -7,12 +8,24 @@ type Props = {
   error: string | null
 }
 
+/** Show empty instead of sticky 0 so the field can be cleared. */
+function numInputValue(value: number): number | '' {
+  return value === 0 || Number.isNaN(value) ? '' : value
+}
+
+function parseNum(raw: string): number {
+  if (raw === '') return 0
+  const n = Number(raw)
+  return Number.isNaN(n) ? 0 : n
+}
+
 function newPiece(): PieceDemand {
   return {
     id: crypto.randomUUID(),
     name: '',
-    length: 5000,
-    quantity: 1,
+    length: 0,
+    quantity: 0,
+    needsPlates: true,
   }
 }
 
@@ -28,6 +41,13 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
     })
   }
 
+  const updatePlates = (patch: Partial<JobInput['plates']>) => {
+    onChange({
+      ...value,
+      plates: { ...value.plates, ...patch },
+    })
+  }
+
   const removePiece = (id: string) => {
     onChange({
       ...value,
@@ -35,9 +55,31 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
     })
   }
 
+  const perRing = value.plates.enabled
+    ? platesPerSegment(value.plates, value.pipeDiameter)
+    : 0
+  const pilesWithPlates = value.pieces
+    .filter((piece) => piece.needsPlates)
+    .reduce((sum, piece) => sum + piece.quantity, 0)
+  const totalPlates = pilesWithPlates * value.plates.platesPerPile
+  const ringsNeeded =
+    value.plates.enabled && perRing > 0 && totalPlates > 0
+      ? Math.ceil(totalPlates / perRing)
+      : 0
+
   return (
     <section className="card">
-      <h2>Параметры раскроя</h2>
+      <h2 className="section-title">Параметры раскроя</h2>
+
+      <label style={{ marginBottom: 16, maxWidth: 280 }}>
+        Диаметр трубы, мм
+        <input
+          type="number"
+          min={1}
+          value={numInputValue(value.pipeDiameter)}
+          onChange={(e) => update({ pipeDiameter: parseNum(e.target.value) })}
+        />
+      </label>
 
       <div className="grid-3">
         <label>
@@ -45,8 +87,8 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
           <input
             type="number"
             min={1}
-            value={value.stockLength}
-            onChange={(e) => update({ stockLength: Number(e.target.value) })}
+            value={numInputValue(value.stockLength)}
+            onChange={(e) => update({ stockLength: parseNum(e.target.value) })}
           />
         </label>
         <label>
@@ -54,8 +96,8 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
           <input
             type="number"
             min={0}
-            value={value.kerf}
-            onChange={(e) => update({ kerf: Number(e.target.value) })}
+            value={numInputValue(value.kerf)}
+            onChange={(e) => update({ kerf: parseNum(e.target.value) })}
           />
         </label>
         <label>
@@ -63,15 +105,15 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
           <input
             type="number"
             min={0}
-            value={value.minRemnant}
-            onChange={(e) => update({ minRemnant: Number(e.target.value) })}
+            value={numInputValue(value.minRemnant)}
+            onChange={(e) => update({ minRemnant: parseNum(e.target.value) })}
           />
         </label>
       </div>
 
       <p className="hint" style={{ marginTop: '-4px', marginBottom: '12px' }}>
-        Пропил вычитается на каждый блок реза. На трубе всегда остаётся хвост не меньше
-        мин. остатка (полезная длина = заготовка − мин. остаток).
+        Пропил учитывается только между отрезками на одной трубе. Хвост не меньше мин.
+        остатка (полезная длина = заготовка − мин. остаток).
       </p>
 
       <label className="checkbox" style={{ marginTop: 0, marginBottom: 12 }}>
@@ -90,8 +132,8 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
             <input
               type="number"
               min={1}
-              value={value.coneLength}
-              onChange={(e) => update({ coneLength: Number(e.target.value) })}
+              value={numInputValue(value.coneLength)}
+              onChange={(e) => update({ coneLength: parseNum(e.target.value) })}
             />
           </label>
           <label>
@@ -99,18 +141,76 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
             <input
               type="number"
               min={1}
-              value={value.nestedConeLength}
-              onChange={(e) => update({ nestedConeLength: Number(e.target.value) })}
+              value={numInputValue(value.nestedConeLength)}
+              onChange={(e) => update({ nestedConeLength: parseNum(e.target.value) })}
             />
           </label>
           <p className="hint">
-            Расход пары A+B = A + B − 2×конус + «конус в конусе». Плюс пропил на блок.
+            Расход пары A+B = A + B − 2×конус + «конус в конусе». Пропил — только между блоками.
           </p>
         </div>
       )}
 
+      <label className="checkbox" style={{ marginTop: 8, marginBottom: 12 }}>
+        <input
+          type="checkbox"
+          checked={value.plates.enabled}
+          onChange={(e) => updatePlates({ enabled: e.target.checked })}
+        />
+        Соединительные пластины
+      </label>
+
+      {value.plates.enabled && (
+        <div className="nest-box" style={{ marginBottom: 16 }}>
+          <div className="grid-3">
+            <label>
+              Длина кольца вдоль трубы, мм
+              <input
+                type="number"
+                min={1}
+                value={numInputValue(value.plates.segmentLength)}
+                onChange={(e) => updatePlates({ segmentLength: parseNum(e.target.value) })}
+              />
+            </label>
+            <label>
+              Ширина пластины, мм
+              <input
+                type="number"
+                min={1}
+                value={numInputValue(value.plates.plateWidth)}
+                onChange={(e) => updatePlates({ plateWidth: parseNum(e.target.value) })}
+              />
+            </label>
+            <label>
+              Зазор между пластинами, мм
+              <input
+                type="number"
+                min={0}
+                value={numInputValue(value.plates.gap)}
+                onChange={(e) => updatePlates({ gap: parseNum(e.target.value) })}
+              />
+            </label>
+            <label>
+              Пластин на 1 сваю, шт
+              <input
+                type="number"
+                min={1}
+                value={numInputValue(value.plates.platesPerPile)}
+                onChange={(e) => updatePlates({ platesPerPile: parseNum(e.target.value) })}
+              />
+            </label>
+          </div>
+          {perRing > 0 && (
+            <p className="hint">
+              С кольца ≈ {perRing} шт · свай с пластинами: {pilesWithPlates} · колец в раскрой:{' '}
+              {ringsNeeded} × {value.plates.segmentLength || '—'} мм
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="pieces-head">
-        <h3>Изделия</h3>
+        <h3 className="section-title" style={{ margin: 0, flex: 1 }}>Изделия</h3>
         <button
           type="button"
           className="secondary"
@@ -132,6 +232,7 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
               <th>Название</th>
               <th>Длина, мм</th>
               <th>Кол-во</th>
+              {value.plates.enabled && <th>Пластины</th>}
               <th />
             </tr>
           </thead>
@@ -150,9 +251,9 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
                   <input
                     type="number"
                     min={1}
-                    value={piece.length}
+                    value={numInputValue(piece.length)}
                     onChange={(e) =>
-                      updatePiece(piece.id, { length: Number(e.target.value) })
+                      updatePiece(piece.id, { length: parseNum(e.target.value) })
                     }
                   />
                 </td>
@@ -160,12 +261,24 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
                   <input
                     type="number"
                     min={1}
-                    value={piece.quantity}
+                    value={numInputValue(piece.quantity)}
                     onChange={(e) =>
-                      updatePiece(piece.id, { quantity: Number(e.target.value) })
+                      updatePiece(piece.id, { quantity: parseNum(e.target.value) })
                     }
                   />
                 </td>
+                {value.plates.enabled && (
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={piece.needsPlates}
+                      onChange={(e) =>
+                        updatePiece(piece.id, { needsPlates: e.target.checked })
+                      }
+                      title="Нужны соединительные пластины"
+                    />
+                  </td>
+                )}
                 <td>
                   <button
                     type="button"

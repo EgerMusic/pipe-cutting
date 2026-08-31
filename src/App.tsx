@@ -6,17 +6,25 @@ import type { CuttingPlan, JobInput } from './lib/types'
 import './App.css'
 
 const initialJob: JobInput = {
+  pipeDiameter: 325,
   stockLength: 12000,
   kerf: 3,
   minRemnant: 150,
   coneLength: 1500,
   nestedConeLength: 2200,
   useConeNesting: true,
+  plates: {
+    enabled: true,
+    segmentLength: 400,
+    plateWidth: 80,
+    gap: 20,
+    platesPerPile: 4,
+  },
   pieces: [
-    { id: crypto.randomUUID(), name: '5000', length: 5000, quantity: 15 },
-    { id: crypto.randomUUID(), name: '6500', length: 6500, quantity: 17 },
-    { id: crypto.randomUUID(), name: '8400', length: 8400, quantity: 58 },
-    { id: crypto.randomUUID(), name: '3200', length: 3200, quantity: 9 },
+    { id: crypto.randomUUID(), name: '5000', length: 5000, quantity: 15, needsPlates: true },
+    { id: crypto.randomUUID(), name: '6500', length: 6500, quantity: 17, needsPlates: true },
+    { id: crypto.randomUUID(), name: '8400', length: 8400, quantity: 58, needsPlates: true },
+    { id: crypto.randomUUID(), name: '3200', length: 3200, quantity: 9, needsPlates: true },
   ],
 }
 
@@ -38,13 +46,16 @@ function App() {
   return (
     <div className="app">
       <header className="hero">
-        <div>
-          <p className="eyebrow">Заводской раскрой</p>
-          <h1>Раскрой конусных свай</h1>
-          <p className="lead">
-            Экономичный раскрой с учётом пропила, минимального остатка и «конус в
-            конусе».
-          </p>
+        <div className="hero-inner">
+          <div>
+            <p className="hero-mark">Карта раскроя</p>
+            <h1>Раскрой свай</h1>
+          </div>
+          <div className="hero-meta">
+            <div>Документ: раскрой</div>
+            <div>Ø {job.pipeDiameter || '—'} мм</div>
+            <div>Редакция: рабочая</div>
+          </div>
         </div>
       </header>
 

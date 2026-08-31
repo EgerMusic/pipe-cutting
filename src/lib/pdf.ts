@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
-import type { CuttingPlan, JobInput } from './types'
+import { tubesWord } from './ru'
+import type { CuttingPlan, JobInput, PatternGroup } from './types'
 
 function escapeHtml(text: string): string {
   return text
@@ -10,107 +11,293 @@ function escapeHtml(text: string): string {
     .replaceAll('"', '&quot;')
 }
 
-function buildReportElement(plan: CuttingPlan, input: JobInput): HTMLDivElement {
+const PAGE_WIDTH_PX = 794
+
+const shell = `
+  font-family: Arial, Helvetica, sans-serif;
+  color: #0f172a;
+  background: #fff;
+`
+
+function makeHost(): HTMLDivElement {
   const root = document.createElement('div')
-  root.style.cssText =
-    'position:fixed;left:-10000px;top:0;width:794px;padding:32px;background:#fff;color:#111;font-family:Arial,sans-serif;'
-
-  const patterns = plan.patterns
-    .map((pattern, index) => {
-      const segments = pattern.blocks
-        .map((block) => {
-          const width = (block.consumed / input.stockLength) * 100
-          const bg = block.kind === 'pair' ? '#7c3aed' : '#2563eb'
-          return `<div style="width:${width}%;background:${bg};color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;">${escapeHtml(block.label)}</div>`
-        })
-        .join('')
-      const remnantWidth = (pattern.remnant / input.stockLength) * 100
-      const remnant =
-        pattern.remnant > 0
-          ? `<div style="width:${remnantWidth}%;background:repeating-linear-gradient(45deg,#ccc,#ccc 5px,#e5e5e5 5px,#e5e5e5 10px);"></div>`
-          : ''
-      const list = pattern.blocks
-        .map(
-          (block, i) =>
-            `<li style="margin:2px 0;">${i + 1}) ${block.kind === 'pair' ? 'Пара' : 'Одиночная'}: ${escapeHtml(block.label)} → ${block.consumed} мм</li>`,
-        )
-        .join('')
-
-      return `
-        <div style="margin:0 0 18px;padding-bottom:12px;border-bottom:1px solid #ddd;break-inside:avoid;">
-          <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Схема ${index + 1} × ${pattern.count} шт</div>
-          <div style="font-size:12px;margin-bottom:6px;">Занято ${pattern.used} мм · остаток ${pattern.remnant} мм</div>
-          <div style="display:flex;height:26px;border:1px solid #999;border-radius:4px;overflow:hidden;background:#eee;">${segments}${remnant}</div>
-          <ol style="margin:8px 0 0;padding-left:18px;font-size:12px;">${list}</ol>
-        </div>
-      `
-    })
-    .join('')
-
-  const pieces = input.pieces
-    .map((piece) => {
-      const name = piece.name.trim() ? ` (${escapeHtml(piece.name)})` : ''
-      return `<li>${piece.quantity} шт × ${piece.length} мм${name}</li>`
-    })
-    .join('')
-
-  root.innerHTML = `
-    <h1 style="margin:0 0 8px;font-size:20px;">Раскрой труб</h1>
-    <p style="margin:0 0 12px;font-size:13px;">${escapeHtml(plan.description)}</p>
-    <p style="margin:0 0 4px;font-size:13px;">Заготовка: ${input.stockLength} мм · Пропил: ${input.kerf} мм · Мин. остаток: ${input.minRemnant} мм</p>
-    ${
-      input.useConeNesting
-        ? `<p style="margin:0 0 4px;font-size:13px;">Конус: ${input.coneLength} мм · Конус в конусе: ${input.nestedConeLength} мм</p>`
-        : ''
-    }
-    <p style="margin:0 0 4px;font-size:13px;"><strong>Труб нужно: ${plan.barsCount} шт</strong></p>
-    <p style="margin:0 0 4px;font-size:13px;">Пар: ${plan.pairCount}, одиночных: ${plan.singleCount}</p>
-    <p style="margin:0 0 16px;font-size:13px;">Использовано: ${plan.totalUsedMm} / ${plan.totalStockMm} мм (отход ${plan.wastePercent.toFixed(1)}%)</p>
-    <h2 style="margin:0 0 8px;font-size:16px;">Позиции заказа</h2>
-    <ul style="margin:0 0 16px;padding-left:18px;font-size:13px;">${pieces}</ul>
-    <h2 style="margin:0 0 8px;font-size:16px;">Схемы раскроя</h2>
-    ${patterns}
-  `
-
+  root.style.cssText = `position:fixed;left:-10000px;top:0;width:${PAGE_WIDTH_PX}px;padding:0;background:#fff;`
   document.body.appendChild(root)
   return root
 }
 
-export async function downloadPlanPdf(plan: CuttingPlan, input: JobInput) {
-  const el = buildReportElement(plan, input)
+async function renderHtml(html: string): Promise<HTMLCanvasElement> {
+  const host = makeHost()
+  host.innerHTML = html
   try {
-    const canvas = await html2canvas(el, {
+    return await html2canvas(host, {
       scale: 2,
       backgroundColor: '#ffffff',
       useCORS: true,
     })
+  } finally {
+    host.remove()
+  }
+}
 
-    const img = canvas.toDataURL('image/png')
-    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    const pageHeight = pdf.internal.pageSize.getHeight()
-    const margin = 10
-    const contentWidth = pageWidth - margin * 2
-    const contentHeight = pageHeight - margin * 2
+function patternHtml(pattern: PatternGroup, index: number, stockLength: number): string {
+  const segments = pattern.blocks
+    .map((block) => {
+      const width = (block.consumed / stockLength) * 100
+      const bg =
+        block.role === 'plate' ? '#0f766e' : block.kind === 'pair' ? '#7c3aed' : '#1d4ed8'
+      return `<div style="width:${width}%;background:${bg};color:#fff;font-size:10px;font-family:Consolas,monospace;display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;">${escapeHtml(block.label)}</div>`
+    })
+    .join('')
+  const remnantWidth = (pattern.remnant / stockLength) * 100
+  const remnant =
+    pattern.remnant > 0
+      ? `<div style="width:${remnantWidth}%;background:repeating-linear-gradient(-45deg,#e2e8f0,#e2e8f0 4px,#f1f5f9 4px,#f1f5f9 8px);"></div>`
+      : ''
 
-    const imgWidth = contentWidth
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
+  return `
+    <div style="${shell};border:1px solid #334155;padding:10px 12px;margin:0;">
+      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:8px;font-family:Consolas,monospace;">
+        <strong style="letter-spacing:0.04em;">Схема ${index + 1} — ${pattern.count} ${tubesWord(pattern.count)}</strong>
+        <span style="color:#475569;">${pattern.used} мм · остаток ${pattern.remnant} мм</span>
+      </div>
+      <div style="display:flex;height:28px;border:1px solid #64748b;overflow:hidden;background:#f8fafc;">${segments}${remnant}</div>
+    </div>
+  `
+}
 
-    let heightLeft = imgHeight
-    let position = margin
+function remnantsTableHtml(
+  rows: Array<{ index: number; count: number; remnant: number }>,
+  withHeader: boolean,
+): string {
+  const th =
+    'border:1px solid #334155;padding:8px 10px;text-align:left;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;background:#0f172a;color:#e2e8f0;font-family:Consolas,monospace;'
+  const td =
+    'border:1px solid #94a3b8;padding:8px 10px;text-align:left;font-size:13px;font-family:Consolas,monospace;'
 
-    pdf.addImage(img, 'PNG', margin, position, imgWidth, imgHeight)
-    heightLeft -= contentHeight
+  const head = withHeader
+    ? `<thead><tr>
+        <th style="${th};width:20%;">Схема</th>
+        <th style="${th};width:40%;">Труб, шт</th>
+        <th style="${th};width:40%;">Остаток, мм</th>
+      </tr></thead>`
+    : ''
 
-    while (heightLeft > 0) {
-      position = margin - (imgHeight - heightLeft)
-      pdf.addPage()
-      pdf.addImage(img, 'PNG', margin, position, imgWidth, imgHeight)
-      heightLeft -= contentHeight
+  const body = rows
+    .map(
+      (row) => `<tr>
+        <td style="${td}">${row.index + 1}</td>
+        <td style="${td}">${row.count}</td>
+        <td style="${td}">${row.remnant}</td>
+      </tr>`,
+    )
+    .join('')
+
+  return `
+    <div style="${shell}">
+      <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+        ${head}
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  `
+}
+
+type PdfCursor = {
+  pdf: jsPDF
+  y: number
+  margin: number
+  contentWidth: number
+  contentHeight: number
+}
+
+function canvasHeightMm(canvas: HTMLCanvasElement, widthMm: number): number {
+  return (canvas.height * widthMm) / canvas.width
+}
+
+async function addBlock(cursor: PdfCursor, html: string, gapMm = 3) {
+  const canvas = await renderHtml(html)
+  let h = canvasHeightMm(canvas, cursor.contentWidth)
+
+  if (h > cursor.contentHeight) {
+    if (cursor.y > cursor.margin + 0.5) cursor.pdf.addPage()
+    cursor.y = cursor.margin
+    const fitH = cursor.contentHeight
+    const fitW = (canvas.width * fitH) / canvas.height
+    const x = cursor.margin + Math.max(0, (cursor.contentWidth - fitW) / 2)
+    cursor.pdf.addImage(canvas.toDataURL('image/png'), 'PNG', x, cursor.y, fitW, fitH)
+    cursor.pdf.addPage()
+    cursor.y = cursor.margin
+    return
+  }
+
+  if (cursor.y + h > cursor.margin + cursor.contentHeight) {
+    cursor.pdf.addPage()
+    cursor.y = cursor.margin
+  }
+
+  cursor.pdf.addImage(
+    canvas.toDataURL('image/png'),
+    'PNG',
+    cursor.margin,
+    cursor.y,
+    cursor.contentWidth,
+    h,
+  )
+  cursor.y += h + gapMm
+}
+
+/** Pack remnant rows into whole-table chunks that fit the remaining page. */
+async function addRemnantsTable(
+  cursor: PdfCursor,
+  rows: Array<{ index: number; count: number; remnant: number }>,
+) {
+  if (rows.length === 0) {
+    await addBlock(
+      cursor,
+      `<div style="${shell};font-size:13px;padding:4px 0;">Остатков нет.</div>`,
+    )
+    return
+  }
+
+  let start = 0
+  while (start < rows.length) {
+    const spaceLeft = cursor.margin + cursor.contentHeight - cursor.y
+    // Estimate ~9mm/row + 12mm header; refine by measuring
+    let take = Math.max(1, Math.min(rows.length - start, Math.floor((spaceLeft - 8) / 9)))
+
+    // Grow/shrink until chunk fits remaining space (or full page)
+    let fitted = false
+    while (!fitted && take >= 1) {
+      const chunk = rows.slice(start, start + take)
+      const html = remnantsTableHtml(chunk, true)
+      const canvas = await renderHtml(html)
+      const h = canvasHeightMm(canvas, cursor.contentWidth)
+
+      const fitsHere = cursor.y + h <= cursor.margin + cursor.contentHeight
+      const fitsPage = h <= cursor.contentHeight
+
+      if (fitsHere) {
+        cursor.pdf.addImage(
+          canvas.toDataURL('image/png'),
+          'PNG',
+          cursor.margin,
+          cursor.y,
+          cursor.contentWidth,
+          h,
+        )
+        cursor.y += h + 3
+        start += take
+        fitted = true
+      } else if (!fitsPage && take > 1) {
+        take -= 1
+      } else if (!fitsHere && cursor.y > cursor.margin + 0.5) {
+        cursor.pdf.addPage()
+        cursor.y = cursor.margin
+        // retry same take on new page
+      } else {
+        // single row somehow taller than page — force place scaled
+        cursor.pdf.addImage(
+          canvas.toDataURL('image/png'),
+          'PNG',
+          cursor.margin,
+          cursor.y,
+          cursor.contentWidth,
+          Math.min(h, cursor.contentHeight),
+        )
+        cursor.pdf.addPage()
+        cursor.y = cursor.margin
+        start += take
+        fitted = true
+      }
     }
 
-    pdf.save(`raskroy-${plan.barsCount}-tubes.pdf`)
-  } finally {
-    el.remove()
+    if (!fitted) {
+      // safety
+      start += 1
+    }
   }
+}
+
+export async function downloadPlanPdf(plan: CuttingPlan, input: JobInput) {
+  const title = plan.title || `Раскрой Ø${input.pipeDiameter} трубы`
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+  const margin = 12
+  const cursor: PdfCursor = {
+    pdf,
+    y: margin,
+    margin,
+    contentWidth: pdf.internal.pageSize.getWidth() - margin * 2,
+    contentHeight: pdf.internal.pageSize.getHeight() - margin * 2,
+  }
+
+  await addBlock(
+    cursor,
+    `
+      <div style="${shell};border:2px solid #0f172a;padding:16px 18px;">
+        <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;">
+          <div>
+            <div style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#0f766e;font-family:Consolas,monospace;margin-bottom:6px;">Карта раскроя</div>
+            <div style="font-size:22px;font-weight:800;margin:0;">${escapeHtml(title)}</div>
+          </div>
+          <div style="text-align:right;font-family:Consolas,monospace;font-size:11px;color:#475569;line-height:1.55;">
+            <div>Документ: раскрой</div>
+            <div>Ø ${input.pipeDiameter} мм</div>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:inline-block;border:1px solid #b45309;background:#fffbeb;padding:8px 12px;font-family:Consolas,monospace;">
+          <span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#b45309;margin-right:10px;">Количество труб</span>
+          <strong style="font-size:22px;color:#92400e;">${plan.barsCount}</strong>
+          <span style="font-size:11px;color:#b45309;margin-left:6px;">шт</span>
+        </div>
+      </div>
+    `,
+    6,
+  )
+
+  const pieces = input.pieces
+    .map((piece) => {
+      const name = piece.name.trim() ? ` (${escapeHtml(piece.name)})` : ''
+      return `<li style="margin:3px 0;font-family:Consolas,monospace;">${piece.quantity} шт × ${piece.length} мм${name}</li>`
+    })
+    .join('')
+
+  await addBlock(
+    cursor,
+    `
+      <div style="${shell};border:1px solid #cbd5e1;padding:12px 14px;">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;font-family:Consolas,monospace;margin-bottom:8px;">Позиции заказа</div>
+        <ul style="margin:0;padding-left:18px;font-size:13px;">${pieces}</ul>
+      </div>
+    `,
+    6,
+  )
+
+  await addBlock(
+    cursor,
+    `<div style="${shell};font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;font-family:Consolas,monospace;padding:2px 0;">Схемы раскроя</div>`,
+    2,
+  )
+
+  for (const [index, pattern] of plan.patterns.entries()) {
+    await addBlock(cursor, patternHtml(pattern, index, input.stockLength), 3)
+  }
+
+  await addBlock(
+    cursor,
+    `<div style="${shell};font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;font-family:Consolas,monospace;padding:6px 0 2px;">Остатки по схемам</div>`,
+    2,
+  )
+
+  const remnantRows = plan.patterns
+    .map((pattern, index) => ({
+      index,
+      count: pattern.count,
+      remnant: pattern.remnant,
+    }))
+    .filter((row) => row.remnant > 0)
+
+  await addRemnantsTable(cursor, remnantRows)
+
+  pdf.save(`raskroy-d${input.pipeDiameter}-${plan.barsCount}tubes.pdf`)
 }
