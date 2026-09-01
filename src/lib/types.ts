@@ -26,6 +26,8 @@ export type JobInput = {
   kerf: number
   /** Always leave at least this much unused on every stock bar (mm). */
   minRemnant: number
+  /** Whole 12 m tubes added to the total purchase count (not used in cutting). */
+  twelveMeterCount: number
   coneLength: number
   nestedConeLength: number
   useConeNesting: boolean
@@ -73,6 +75,11 @@ export type CuttingPlan = {
   description: string
   bars: StockBar[]
   patterns: PatternGroup[]
+  /** Tubes used in cutting layouts. */
+  cutBarsCount: number
+  /** Whole 12 m tubes added to the order (no cutting). */
+  twelveMeterCount: number
+  /** Total tubes to purchase: cutBarsCount + twelveMeterCount. */
   barsCount: number
   totalDemandMm: number
   totalStockMm: number

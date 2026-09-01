@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
-import { tubesWord } from './ru'
+import { formatPercent, tubesWord } from './ru'
 import type { CuttingPlan, JobInput, PatternGroup } from './types'
 
 function escapeHtml(text: string): string {
@@ -40,6 +40,10 @@ async function renderHtml(html: string): Promise<HTMLCanvasElement> {
   }
 }
 
+function remnantCellHtml(percent: number, mm: number): string {
+  return `<span style="color:#0f766e;font-weight:600;">${formatPercent(percent)} · ${mm} мм</span>`
+}
+
 function patternHtml(pattern: PatternGroup, index: number, stockLength: number): string {
   const segments = pattern.blocks
     .map((block) => {
@@ -57,9 +61,18 @@ function patternHtml(pattern: PatternGroup, index: number, stockLength: number):
 
   return `
     <div style="${shell};border:1px solid #334155;padding:10px 12px;margin:0;">
-      <div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;margin-bottom:8px;font-family:Consolas,monospace;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;font-size:12px;margin-bottom:8px;font-family:Consolas,monospace;">
         <strong style="letter-spacing:0.04em;">Схема ${index + 1} — ${pattern.count} ${tubesWord(pattern.count)}</strong>
-        <span style="color:#475569;">${pattern.used} мм · остаток ${pattern.remnant} мм</span>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <div style="border:1px solid #cbd5e1;background:#f8fafc;padding:4px 10px;text-align:right;line-height:1.25;">
+            <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">занято</div>
+            <div style="color:#475569;">${pattern.used} мм</div>
+          </div>
+          <div style="border:1px solid #99f6e4;background:#f0fdfa;padding:4px 10px;text-align:right;line-height:1.25;">
+            <div style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;">остаток</div>
+            <div style="color:#0f766e;font-weight:600;">${formatPercent((pattern.remnant / stockLength) * 100)} · ${pattern.remnant} мм</div>
+          </div>
+        </div>
       </div>
       <div style="display:flex;height:28px;border:1px solid #64748b;overflow:hidden;background:#f8fafc;">${segments}${remnant}</div>
     </div>
@@ -68,6 +81,7 @@ function patternHtml(pattern: PatternGroup, index: number, stockLength: number):
 
 function remnantsTableHtml(
   rows: Array<{ index: number; count: number; remnant: number }>,
+  stockLength: number,
   withHeader: boolean,
 ): string {
   const th =
@@ -78,8 +92,8 @@ function remnantsTableHtml(
   const head = withHeader
     ? `<thead><tr>
         <th style="${th};width:20%;">Схема</th>
-        <th style="${th};width:40%;">Труб, шт</th>
-        <th style="${th};width:40%;">Остаток, мм</th>
+        <th style="${th};width:25%;">Труб, шт</th>
+        <th style="${th};width:35%;">Остаток</th>
       </tr></thead>`
     : ''
 
@@ -88,7 +102,7 @@ function remnantsTableHtml(
       (row) => `<tr>
         <td style="${td}">${row.index + 1}</td>
         <td style="${td}">${row.count}</td>
-        <td style="${td}">${row.remnant}</td>
+        <td style="${td}">${remnantCellHtml((row.remnant / stockLength) * 100, row.remnant)}</td>
       </tr>`,
     )
     .join('')
@@ -151,6 +165,7 @@ async function addBlock(cursor: PdfCursor, html: string, gapMm = 3) {
 async function addRemnantsTable(
   cursor: PdfCursor,
   rows: Array<{ index: number; count: number; remnant: number }>,
+  stockLength: number,
 ) {
   if (rows.length === 0) {
     await addBlock(
@@ -170,7 +185,7 @@ async function addRemnantsTable(
     let fitted = false
     while (!fitted && take >= 1) {
       const chunk = rows.slice(start, start + take)
-      const html = remnantsTableHtml(chunk, true)
+      const html = remnantsTableHtml(chunk, stockLength, true)
       const canvas = await renderHtml(html)
       const h = canvasHeightMm(canvas, cursor.contentWidth)
 
@@ -245,10 +260,33 @@ export async function downloadPlanPdf(plan: CuttingPlan, input: JobInput) {
             <div>Ø ${input.pipeDiameter} мм</div>
           </div>
         </div>
-        <div style="margin-top:14px;display:inline-block;border:1px solid #b45309;background:#fffbeb;padding:8px 12px;font-family:Consolas,monospace;">
-          <span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#b45309;margin-right:10px;">Количество труб</span>
-          <strong style="font-size:22px;color:#92400e;">${plan.barsCount}</strong>
-          <span style="font-size:11px;color:#b45309;margin-left:6px;">шт</span>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+          <div style="border:1px solid #b45309;background:#fffbeb;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#b45309;margin-bottom:6px;">Количество труб</div>
+            <div style="display:flex;align-items:baseline;gap:8px;min-height:34px;">
+              <strong style="font-size:22px;color:#92400e;line-height:1;">${plan.barsCount}</strong>
+              <span style="font-size:11px;color:#b45309;">шт</span>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#b45309;margin-top:2px;">${
+              plan.twelveMeterCount > 0
+                ? `${plan.cutBarsCount} раскрой + ${plan.twelveMeterCount} × 12 м`
+                : '—'
+            }</div>
+          </div>
+          <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Польза</div>
+            <div style="min-height:34px;display:flex;align-items:flex-end;">
+              <strong style="font-size:22px;color:#0f766e;line-height:1;">${formatPercent(100 - plan.wastePercent)}</strong>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#64748b;opacity:0;">—</div>
+          </div>
+          <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Остатки</div>
+            <div style="min-height:34px;display:flex;align-items:flex-end;">
+              <strong style="font-size:22px;color:#0f766e;line-height:1;">${formatPercent(plan.wastePercent)}</strong>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#64748b;margin-top:2px;">${plan.wasteMm} мм</div>
+          </div>
         </div>
       </div>
     `,
@@ -297,7 +335,7 @@ export async function downloadPlanPdf(plan: CuttingPlan, input: JobInput) {
     }))
     .filter((row) => row.remnant > 0)
 
-  await addRemnantsTable(cursor, remnantRows)
+  await addRemnantsTable(cursor, remnantRows, input.stockLength)
 
   pdf.save(`raskroy-d${input.pipeDiameter}-${plan.barsCount}tubes.pdf`)
 }

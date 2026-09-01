@@ -11,3 +11,7 @@ export function pluralRu(count: number, one: string, few: string, many: string):
 export function tubesWord(count: number): string {
   return pluralRu(count, 'труба', 'трубы', 'труб')
 }
+
+export function formatPercent(value: number, digits = 2): string {
+  return `${value.toFixed(digits).replace('.', ',')}%`
+}

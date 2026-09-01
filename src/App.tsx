@@ -10,6 +10,7 @@ const initialJob: JobInput = {
   stockLength: 12000,
   kerf: 3,
   minRemnant: 150,
+  twelveMeterCount: 0,
   coneLength: 1500,
   nestedConeLength: 2200,
   useConeNesting: true,

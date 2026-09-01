@@ -111,9 +111,20 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
         </label>
       </div>
 
+      <label style={{ marginTop: 0, marginBottom: 12, maxWidth: 320 }}>
+        12-метровые, шт
+        <input
+          type="number"
+          min={0}
+          value={numInputValue(value.twelveMeterCount)}
+          onChange={(e) => update({ twelveMeterCount: parseNum(e.target.value) })}
+        />
+      </label>
+
       <p className="hint" style={{ marginTop: '-4px', marginBottom: '12px' }}>
         Пропил учитывается только между отрезками на одной трубе. Хвост не меньше мин.
-        остатка (полезная длина = заготовка − мин. остаток).
+        остатка (полезная длина = заготовка − мин. остаток). 12-метровые добавляются к
+        общему количеству труб без раскроя.
       </p>
 
       <label className="checkbox" style={{ marginTop: 0, marginBottom: 12 }}>

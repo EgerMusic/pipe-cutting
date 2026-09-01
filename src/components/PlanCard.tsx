@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { downloadPlanPdf } from '../lib/pdf'
-import { tubesWord } from '../lib/ru'
+import { formatPercent, tubesWord } from '../lib/ru'
 import type { CuttingPlan, JobInput } from '../lib/types'
 
 type Props = {
@@ -40,10 +40,35 @@ export function PlanCard({ plan, input }: Props) {
         </button>
       </div>
 
-      <div className="tube-count">
-        <span>Количество труб</span>
-        <strong>{plan.barsCount}</strong>
-        <span>шт</span>
+      <div className="plan-summary">
+        <div className="summary-metric summary-metric-amber">
+          <span className="summary-metric-label">Количество труб</span>
+          <div className="summary-metric-main">
+            <strong>{plan.barsCount}</strong>
+            <span className="summary-metric-unit">шт</span>
+          </div>
+          <span className="summary-metric-sub">
+            {plan.twelveMeterCount > 0
+              ? `${plan.cutBarsCount} раскрой + ${plan.twelveMeterCount} × 12 м`
+              : '\u00a0'}
+          </span>
+        </div>
+        <div className="summary-metric">
+          <span className="summary-metric-label">Польза</span>
+          <div className="summary-metric-main">
+            <strong>{formatPercent(100 - plan.wastePercent)}</strong>
+          </div>
+          <span className="summary-metric-sub" aria-hidden="true">
+            &nbsp;
+          </span>
+        </div>
+        <div className="summary-metric">
+          <span className="summary-metric-label">Остатки</span>
+          <div className="summary-metric-main">
+            <strong>{formatPercent(plan.wastePercent)}</strong>
+          </div>
+          <span className="summary-metric-sub">{plan.wasteMm} мм</span>
+        </div>
       </div>
 
       <h3 className="section-title">Схемы раскроя</h3>
@@ -71,9 +96,19 @@ export function PlanCard({ plan, input }: Props) {
                 <strong>
                   Схема {patternIndex + 1} — {pattern.count} {tubesWord(pattern.count)}
                 </strong>
-                <span>
-                  {pattern.used} мм · остаток {pattern.remnant} мм
-                </span>
+                <div className="bar-meta-stats">
+                  <div className="bar-meta-stat">
+                    <span className="bar-meta-stat-label">занято</span>
+                    <span>{pattern.used} мм</span>
+                  </div>
+                  <div className="bar-meta-stat bar-meta-stat-rem">
+                    <span className="bar-meta-stat-label">остаток</span>
+                    <span>
+                      {formatPercent((pattern.remnant / input.stockLength) * 100)} ·{' '}
+                      {pattern.remnant} мм
+                    </span>
+                  </div>
+                </div>
               </div>
               <div className="bar-track">
                 {pattern.blocks.map((block, idx) => {
@@ -111,7 +146,7 @@ export function PlanCard({ plan, input }: Props) {
             <tr>
               <th>Схема</th>
               <th>Труб, шт</th>
-              <th>Остаток, мм</th>
+              <th>Остаток</th>
             </tr>
           </thead>
           <tbody>
@@ -119,7 +154,10 @@ export function PlanCard({ plan, input }: Props) {
               <tr key={`rem-${pattern.signature}`}>
                 <td>{index + 1}</td>
                 <td>{pattern.count}</td>
-                <td>{pattern.remnant}</td>
+                <td>
+                  {formatPercent((pattern.remnant / input.stockLength) * 100)} ·{' '}
+                  {pattern.remnant} мм
+                </td>
               </tr>
             ))}
           </tbody>
