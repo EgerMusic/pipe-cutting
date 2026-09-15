@@ -15,3 +15,10 @@ export function tubesWord(count: number): string {
 export function formatPercent(value: number, digits = 2): string {
   return `${value.toFixed(digits).replace('.', ',')}%`
 }
+
+export function formatRub(value: number, digits = 0): string {
+  return `${value.toLocaleString('ru-RU', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })} ₽`
+}

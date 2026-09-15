@@ -609,3 +609,64 @@ table.remnants tbody tr:hover td {
     justify-content: flex-start;
   }
 }
+
+.app-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-tab {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.app-tab.active {
+  border-color: var(--amber-dim);
+  background: rgba(240, 180, 41, 0.12);
+  color: var(--amber);
+}
+
+.cost-mode {
+  margin-bottom: 16px;
+}
+
+.cost-mode-label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.cost-mode-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cost-mode-buttons .primary,
+.cost-mode-buttons .secondary {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+table.cost-table .cost-col-rub {
+  text-align: right;
+  white-space: nowrap;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+tr.cost-total-row td {
+  border-top: 2px solid var(--line-strong);
+  padding-top: 12px;
+}

@@ -1,7 +1,8 @@
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
-import { formatPercent, tubesWord } from './ru'
-import type { CuttingPlan, JobInput, PatternGroup } from './types'
+import type { CostEstimate, CostInput } from './costTypes'
+import { formatPercent, formatRub, tubesWord } from './ru'
+import { jobDiameters, pieceDiameter, type CuttingPlan, type JobInput, type PatternGroup } from './types'
 
 function escapeHtml(text: string): string {
   return text
@@ -257,7 +258,7 @@ export async function downloadPlanPdf(plan: CuttingPlan, input: JobInput) {
           </div>
           <div style="text-align:right;font-family:Consolas,monospace;font-size:11px;color:#475569;line-height:1.55;">
             <div>Документ: раскрой</div>
-            <div>Ø ${input.pipeDiameter} мм</div>
+            <div>${jobDiameters(input).length > 1 ? `Ø ${jobDiameters(input).join(', ')} мм` : `Ø ${input.pipeDiameter} мм`}</div>
           </div>
         </div>
         <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
@@ -293,10 +294,13 @@ export async function downloadPlanPdf(plan: CuttingPlan, input: JobInput) {
     6,
   )
 
+  const multiDiameter = jobDiameters(input).length > 1
   const pieces = input.pieces
     .map((piece) => {
       const name = piece.name.trim() ? ` (${escapeHtml(piece.name)})` : ''
-      return `<li style="margin:3px 0;font-family:Consolas,monospace;">${piece.quantity} шт × ${piece.length} мм${name}</li>`
+      const d = pieceDiameter(piece, input)
+      const dLabel = multiDiameter ? `Ø${d} · ` : ''
+      return `<li style="margin:3px 0;font-family:Consolas,monospace;">${dLabel}${piece.quantity} шт × ${piece.length} мм${name}</li>`
     })
     .join('')
 
@@ -337,5 +341,130 @@ export async function downloadPlanPdf(plan: CuttingPlan, input: JobInput) {
 
   await addRemnantsTable(cursor, remnantRows, input.stockLength)
 
-  pdf.save(`raskroy-d${input.pipeDiameter}-${plan.barsCount}tubes.pdf`)
+  const dTag = jobDiameters(input).length === 1 ? jobDiameters(input)[0] : 'multi'
+  pdf.save(`raskroy-d${dTag}-${plan.barsCount}tubes.pdf`)
+}
+
+const COST_MODE_LABEL: Record<CostInput['sourceMode'], string> = {
+  simple: 'Простой',
+  positions: 'По позициям',
+  fromCutting: 'Из раскроя',
+}
+
+export async function downloadCostPdf(estimate: CostEstimate, input: CostInput) {
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+  const margin = 12
+  const cursor: PdfCursor = {
+    pdf,
+    y: margin,
+    margin,
+    contentWidth: pdf.internal.pageSize.getWidth() - margin * 2,
+    contentHeight: pdf.internal.pageSize.getHeight() - margin * 2,
+  }
+
+  const diameters =
+    input.sourceMode === 'simple'
+      ? [input.pipeDiameterMm]
+      : [...new Set(input.positions.map((p) => p.pipeDiameterMm).filter((d) => d > 0))].sort(
+          (a, b) => a - b,
+        )
+  const diameterLabel =
+    diameters.length === 0
+      ? '—'
+      : diameters.length === 1
+        ? `Ø ${diameters[0]} мм`
+        : `Ø ${diameters.join(', ')} мм`
+
+  await addBlock(
+    cursor,
+    `
+      <div style="${shell};border:2px solid #0f172a;padding:16px 18px;">
+        <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-end;">
+          <div>
+            <div style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#0f766e;font-family:Consolas,monospace;margin-bottom:6px;">Смета</div>
+            <div style="font-size:22px;font-weight:800;margin:0;">Стоимость изготовления</div>
+          </div>
+          <div style="text-align:right;font-family:Consolas,monospace;font-size:11px;color:#475569;line-height:1.55;">
+            <div>Документ: смета</div>
+            <div>${escapeHtml(diameterLabel)}</div>
+            <div>Режим: ${escapeHtml(COST_MODE_LABEL[input.sourceMode])}</div>
+          </div>
+        </div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+          <div style="border:1px solid #b45309;background:#fffbeb;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#b45309;margin-bottom:6px;">Итого</div>
+            <div style="display:flex;align-items:baseline;gap:8px;min-height:34px;">
+              <strong style="font-size:22px;color:#92400e;line-height:1;">${escapeHtml(formatRub(estimate.totalRub))}</strong>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#b45309;margin-top:2px;">${
+              estimate.paintAreaM2 > 0 ? `${estimate.paintAreaM2.toFixed(1)} м² окраски` : '—'
+            }</div>
+          </div>
+          <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Металл</div>
+            <div style="min-height:34px;display:flex;align-items:flex-end;">
+              <strong style="font-size:22px;color:#0f766e;line-height:1;">${escapeHtml(formatRub(estimate.metalRub))}</strong>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#64748b;margin-top:2px;">${
+              estimate.metalMassTon > 0 ? `${estimate.metalMassTon.toFixed(3)} т` : '—'
+            }</div>
+          </div>
+          <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Окраска</div>
+            <div style="min-height:34px;display:flex;align-items:flex-end;">
+              <strong style="font-size:22px;color:#0f766e;line-height:1;">${escapeHtml(formatRub(estimate.paintMaterialRub + estimate.paintLaborRub))}</strong>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#64748b;margin-top:2px;">${
+              estimate.paintKg > 0 ? `${estimate.paintKg.toFixed(1)} кг эмали` : '—'
+            }</div>
+          </div>
+        </div>
+      </div>
+    `,
+    6,
+  )
+
+  const th =
+    'border:1px solid #334155;padding:8px 10px;text-align:left;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;background:#0f172a;color:#e2e8f0;font-family:Consolas,monospace;'
+  const td =
+    'border:1px solid #94a3b8;padding:8px 10px;text-align:left;font-size:13px;font-family:Consolas,monospace;'
+  const tdRub =
+    'border:1px solid #94a3b8;padding:8px 10px;text-align:right;font-size:13px;font-family:Consolas,monospace;white-space:nowrap;'
+
+  const rows = estimate.lines
+    .map(
+      (line) => `<tr>
+        <td style="${td}">${escapeHtml(line.label)}</td>
+        <td style="${td};color:#64748b;">${escapeHtml(line.detail)}</td>
+        <td style="${tdRub}">${escapeHtml(formatRub(line.rub))}</td>
+      </tr>`,
+    )
+    .join('')
+
+  await addBlock(
+    cursor,
+    `
+      <div style="${shell}">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;font-family:Consolas,monospace;margin-bottom:8px;">Статьи</div>
+        <table style="border-collapse:collapse;width:100%;table-layout:fixed;">
+          <thead>
+            <tr>
+              <th style="${th};width:28%;">Статья</th>
+              <th style="${th};width:44%;">Детали</th>
+              <th style="${th};width:28%;text-align:right;">Сумма</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            <tr>
+              <td style="${td};border-top:2px solid #334155;" colspan="2"><strong>Стоимость изготовления</strong></td>
+              <td style="${tdRub};border-top:2px solid #334155;"><strong>${escapeHtml(formatRub(estimate.totalRub))}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    `,
+  )
+
+  pdf.save(`smeta-${input.sourceMode}.pdf`)
 }

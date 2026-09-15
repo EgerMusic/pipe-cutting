@@ -6,8 +6,12 @@ import {
   type StockBar,
   barCapacity,
   groupBarsIntoPatterns,
+  jobDiameters,
   nestingSavings,
   pairConsumed,
+  pieceDiameter,
+  plateSegmentsForDiameter,
+  platesPerSegment,
   summarizePlates,
   usedOnBar,
 } from './types'
@@ -30,11 +34,12 @@ function nextId(prefix: string): string {
   return `${prefix}-${pieceSeq}`
 }
 
-function expandWorkPieces(input: JobInput): WorkPiece[] {
+function expandWorkPiecesForDiameter(input: JobInput, diameter: number): WorkPiece[] {
   pieceSeq = 0
   const pieces: WorkPiece[] = []
 
   for (const piece of input.pieces) {
+    if (pieceDiameter(piece, input) !== diameter) continue
     for (let i = 0; i < piece.quantity; i += 1) {
       pieces.push({
         id: nextId('pile'),
@@ -44,12 +49,12 @@ function expandWorkPieces(input: JobInput): WorkPiece[] {
     }
   }
 
-  const plates = summarizePlates(input)
-  if (plates && plates.segmentsNeeded > 0) {
-    for (let i = 0; i < plates.segmentsNeeded; i += 1) {
+  const segments = plateSegmentsForDiameter(input, diameter)
+  if (segments > 0) {
+    for (let i = 0; i < segments; i += 1) {
       pieces.push({
         id: nextId('plate'),
-        length: plates.segmentLength,
+        length: input.plates.segmentLength,
         role: 'plate',
       })
     }
@@ -470,10 +475,17 @@ function buildPlan(
   const cutBarsCount = bars.length
   const twelveMeterCount = input.twelveMeterCount
   const barsCount = cutBarsCount + twelveMeterCount
+  const diameters = jobDiameters(input)
+  const title =
+    diameters.length === 0
+      ? 'Раскрой трубы'
+      : diameters.length === 1
+        ? `Раскрой Ø${diameters[0]} трубы`
+        : `Раскрой Ø${diameters.join(', Ø')} мм`
 
   return {
     mode: 'economical',
-    title: `Раскрой Ø${input.pipeDiameter} трубы`,
+    title,
     description: '',
     bars,
     patterns,
@@ -544,6 +556,10 @@ function validateInput(input: JobInput): string[] {
     throw new Error('Укажите диаметр трубы')
   }
 
+  if (input.pieces.some((p) => pieceDiameter(p, input) <= 0)) {
+    throw new Error('У каждой позиции должен быть диаметр (или задайте диаметр по умолчанию)')
+  }
+
   if (input.plates.enabled) {
     const p = input.plates
     if (p.segmentLength <= 0 || p.plateWidth <= 0 || p.platesPerPile <= 0) {
@@ -551,15 +567,25 @@ function validateInput(input: JobInput): string[] {
     }
     if (p.gap < 0) throw new Error('Зазор между пластинами не может быть отрицательным')
 
+    for (const diameter of jobDiameters(input)) {
+      const pilesWithPlates = input.pieces.filter(
+        (piece) => piece.needsPlates && pieceDiameter(piece, input) === diameter,
+      )
+      if (pilesWithPlates.length === 0) continue
+      const perSegment = platesPerSegment(input.plates, diameter)
+      if (perSegment < 1) {
+        throw new Error(
+          `С кольца Ø${diameter} мм не получается ни одной пластины — проверьте ширину и зазор`,
+        )
+      }
+    }
+
     const summary = summarizePlates(input)
-    if (!summary || summary.platesPerSegment < 1) {
-      throw new Error(
-        'С одного кольца не получается ни одной пластины — проверьте диаметр, ширину и зазор',
+    if (summary) {
+      warnings.push(
+        `Пластины: нужно ${summary.totalPlates} шт (${summary.totalPiles} свай × ${p.platesPerPile}). Колец в раскрой: ${summary.segmentsNeeded} × ${summary.segmentLength} мм.`,
       )
     }
-    warnings.push(
-      `Пластины: нужно ${summary.totalPlates} шт (${summary.totalPiles} свай × ${p.platesPerPile}). С кольца: ${summary.platesPerSegment} шт. Колец в раскрой: ${summary.segmentsNeeded} × ${summary.segmentLength} мм.`,
-    )
   }
 
   return warnings
@@ -567,14 +593,37 @@ function validateInput(input: JobInput): string[] {
 
 export function planEconomical(input: JobInput): CuttingPlan {
   const warnings = validateInput(input)
-  const workPieces = expandWorkPieces(input)
-  for (const piece of workPieces) {
-    assertPieceFitsStock(piece.length, input)
+  const diameters = jobDiameters(input)
+  if (diameters.length === 0) {
+    throw new Error('Добавьте позиции с диаметром')
   }
 
-  const { bars, blocks } = packEconomicalDense(workPieces, input)
+  const allBars: StockBar[] = []
+  const allBlocks: CutBlock[] = []
+  const allWorkPieces: WorkPiece[] = []
+  let barIndex = 1
 
-  return buildPlan(bars, input, blocks, workPieces, warnings)
+  for (const diameter of diameters) {
+    const pool = expandWorkPiecesForDiameter(input, diameter)
+    if (pool.length === 0) continue
+    for (const piece of pool) {
+      assertPieceFitsStock(piece.length, input)
+    }
+    const { bars, blocks } = packEconomicalDense(pool, input)
+    for (const bar of bars) {
+      allBars.push({ ...bar, index: barIndex })
+      barIndex += 1
+    }
+    allBlocks.push(...blocks)
+    allWorkPieces.push(...pool)
+    warnings.push(`Ø${diameter} мм: ${bars.length} труб в раскрое.`)
+  }
+
+  if (allBars.length === 0) {
+    throw new Error('Не удалось разложить изделия на заготовки')
+  }
+
+  return buildPlan(allBars, input, allBlocks, allWorkPieces, warnings)
 }
 
 export function calculatePlan(input: JobInput): CuttingPlan {

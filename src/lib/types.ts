@@ -3,6 +3,8 @@ export type PieceDemand = {
   name: string
   length: number
   quantity: number
+  /** Outer diameter for this position; 0 = use job default. */
+  pipeDiameter: number
   /** Whether this pile position needs connecting plates. */
   needsPlates: boolean
 }
@@ -19,8 +21,21 @@ export type PlatesConfig = {
   platesPerPile: number
 }
 
+export function pieceDiameter(piece: PieceDemand, job: Pick<JobInput, 'pipeDiameter'>): number {
+  return piece.pipeDiameter > 0 ? piece.pipeDiameter : job.pipeDiameter
+}
+
+export function jobDiameters(job: JobInput): number[] {
+  const set = new Set<number>()
+  for (const piece of job.pieces) {
+    const d = pieceDiameter(piece, job)
+    if (d > 0) set.add(d)
+  }
+  return [...set].sort((a, b) => a - b)
+}
+
 export type JobInput = {
-  /** Pipe outer diameter for the whole job, mm (e.g. 325). */
+  /** Default pipe diameter for new positions, mm (e.g. 325). */
   pipeDiameter: number
   stockLength: number
   kerf: number
@@ -169,15 +184,30 @@ export function platesPerSegment(
   return Math.floor((Math.PI * pipeDiameter) / step)
 }
 
+function plateSegmentsForDiameter(input: JobInput, diameter: number): number {
+  const perSegment = platesPerSegment(input.plates, diameter)
+  if (perSegment <= 0) return 0
+  const piles = input.pieces.filter(
+    (piece) => piece.needsPlates && pieceDiameter(piece, input) === diameter,
+  )
+  const totalPlates = piles.reduce((sum, piece) => sum + piece.quantity, 0) * input.plates.platesPerPile
+  if (totalPlates <= 0) return 0
+  return Math.ceil(totalPlates / perSegment)
+}
+
 export function summarizePlates(input: JobInput): PlatesSummary | null {
   if (!input.plates.enabled) return null
-  const perSegment = platesPerSegment(input.plates, input.pipeDiameter)
+  const diameters = jobDiameters(input)
   const totalPiles = input.pieces
     .filter((piece) => piece.needsPlates)
     .reduce((sum, piece) => sum + piece.quantity, 0)
   const totalPlates = totalPiles * input.plates.platesPerPile
-  const segmentsNeeded =
-    perSegment > 0 && totalPlates > 0 ? Math.ceil(totalPlates / perSegment) : 0
+  const segmentsNeeded = diameters.reduce(
+    (sum, diameter) => sum + plateSegmentsForDiameter(input, diameter),
+    0,
+  )
+  const perSegment =
+    diameters.length === 1 ? platesPerSegment(input.plates, diameters[0]) : 0
 
   return {
     platesPerSegment: perSegment,
@@ -187,3 +217,5 @@ export function summarizePlates(input: JobInput): PlatesSummary | null {
     segmentLength: input.plates.segmentLength,
   }
 }
+
+export { plateSegmentsForDiameter }
