@@ -362,10 +362,16 @@ export async function downloadCostPdf(estimate: CostEstimate, input: CostInput) 
     contentHeight: pdf.internal.pageSize.getHeight() - margin * 2,
   }
 
+  const pdfPositions =
+    input.sourceMode === 'positions'
+      ? input.manualPositions
+      : input.sourceMode === 'fromCutting'
+        ? input.cuttingPositions
+        : []
   const diameters =
     input.sourceMode === 'simple'
       ? [input.pipeDiameterMm]
-      : [...new Set(input.positions.map((p) => p.pipeDiameterMm).filter((d) => d > 0))].sort(
+      : [...new Set(pdfPositions.map((p) => p.pipeDiameterMm).filter((d) => d > 0))].sort(
           (a, b) => a - b,
         )
   const diameterLabel =

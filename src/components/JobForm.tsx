@@ -1,4 +1,4 @@
-import { jobDiameters, pieceDiameter, platesPerSegment } from '../lib/types'
+import { platesPerSegment } from '../lib/types'
 import type { JobInput, PieceDemand } from '../lib/types'
 
 type Props = {
@@ -19,13 +19,13 @@ function parseNum(raw: string): number {
   return Number.isNaN(n) ? 0 : n
 }
 
-function newPiece(defaultDiameter: number): PieceDemand {
+function newPiece(): PieceDemand {
   return {
     id: crypto.randomUUID(),
     name: '',
     length: 0,
     quantity: 0,
-    pipeDiameter: defaultDiameter > 0 ? defaultDiameter : 0,
+    pipeDiameter: 0,
     needsPlates: true,
   }
 }
@@ -60,27 +60,20 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
     .filter((piece) => piece.needsPlates)
     .reduce((sum, piece) => sum + piece.quantity, 0)
   const totalPlates = pilesWithPlates * value.plates.platesPerPile
-  const plateRingHint =
-    value.plates.enabled && totalPlates > 0
-      ? jobDiameters(value)
-          .map((d) => {
-            const perRing = platesPerSegment(value.plates, d)
-            const piles = value.pieces.filter(
-              (p) => p.needsPlates && pieceDiameter(p, value) === d,
-            )
-            const plates = piles.reduce((s, p) => s + p.quantity, 0) * value.plates.platesPerPile
-            const rings = perRing > 0 ? Math.ceil(plates / perRing) : 0
-            return `Ø${d}: ${rings} кол.`
-          })
-          .join(' · ')
-      : ''
+  const perRing = value.plates.enabled
+    ? platesPerSegment(value.plates, value.pipeDiameter)
+    : 0
+  const ringsNeeded =
+    value.plates.enabled && perRing > 0 && totalPlates > 0
+      ? Math.ceil(totalPlates / perRing)
+      : 0
 
   return (
     <section className="card">
       <h2 className="section-title">Параметры раскроя</h2>
 
       <label style={{ marginBottom: 16, maxWidth: 320 }}>
-        Диаметр по умолчанию, мм
+        Диаметр трубы, мм
         <input
           type="number"
           min={1}
@@ -88,9 +81,6 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
           onChange={(e) => update({ pipeDiameter: parseNum(e.target.value) })}
         />
       </label>
-      <p className="hint" style={{ marginTop: '-8px', marginBottom: 12 }}>
-        У каждой позиции можно указать свой Ø; пусто в строке — берётся значение по умолчанию.
-      </p>
 
       <div className="grid-3">
         <label>
@@ -222,9 +212,9 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
               />
             </label>
           </div>
-          {plateRingHint && (
+          {ringsNeeded > 0 && (
             <p className="hint">
-              Свай с пластинами: {pilesWithPlates} · колец в раскрой: {plateRingHint} ×{' '}
+              Свай с пластинами: {pilesWithPlates} · колец в раскрой: {ringsNeeded} ×{' '}
               {value.plates.segmentLength || '—'} мм
             </p>
           )}
@@ -239,7 +229,7 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
           onClick={() =>
             onChange({
               ...value,
-              pieces: [...value.pieces, newPiece(value.pipeDiameter)],
+              pieces: [...value.pieces, newPiece()],
             })
           }
         >
@@ -252,7 +242,6 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
           <thead>
             <tr>
               <th>Название</th>
-              <th>Ø, мм</th>
               <th>Длина, мм</th>
               <th>Кол-во</th>
               {value.plates.enabled && <th>Пластины</th>}
@@ -268,18 +257,6 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
                     placeholder="например Свая 1"
                     value={piece.name}
                     onChange={(e) => updatePiece(piece.id, { name: e.target.value })}
-                  />
-                </td>
-                <td>
-                  <input
-                    type="number"
-                    min={1}
-                    placeholder={value.pipeDiameter ? String(value.pipeDiameter) : '—'}
-                    value={numInputValue(piece.pipeDiameter)}
-                    onChange={(e) =>
-                      updatePiece(piece.id, { pipeDiameter: parseNum(e.target.value) })
-                    }
-                    title="Пусто — диаметр по умолчанию"
                   />
                 </td>
                 <td>

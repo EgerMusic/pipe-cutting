@@ -37,6 +37,12 @@ export function paintPositionsFromJob(job: JobInput, defaultPaintLengthMm?: numb
   }))
 }
 
+function activePositions(input: CostInput): CostPosition[] {
+  if (input.sourceMode === 'positions') return input.manualPositions
+  if (input.sourceMode === 'fromCutting') return input.cuttingPositions
+  return []
+}
+
 function paintPositionsForInput(input: CostInput): CostPosition[] {
   if (input.sourceMode === 'simple') {
     const paintLen = input.simple.paintLengthMm || input.simple.lengthMm
@@ -52,10 +58,7 @@ function paintPositionsForInput(input: CostInput): CostPosition[] {
       },
     ]
   }
-  if (input.sourceMode === 'fromCutting') {
-    return input.positions.filter((p) => p.paintLengthMm > 0 && p.quantity > 0)
-  }
-  return input.positions.filter((p) => p.paintLengthMm > 0 && p.quantity > 0)
+  return activePositions(input).filter((p) => p.paintLengthMm > 0 && p.quantity > 0)
 }
 
 function totalPaintAreaM2(positions: CostPosition[]): number {
@@ -71,30 +74,101 @@ function paintConsumptionKgPerM2(rates: CostRates): number {
   return rates.consumptionKgPerM2AtRef * scale * (1 + rates.paintWastePercent / 100)
 }
 
+type MetalSummary = {
+  massKg: number
+  tubeCount: number
+  stockLengthMm: number
+  detail: string
+}
+
+/** Доли заготовок по Ø для режимов с общим числом труб (простой / из раскроя). */
+function metalDiameterWeights(input: CostInput): Map<number, number> {
+  const weights = new Map<number, number>()
+  const add = (diameterMm: number, weight: number) => {
+    if (diameterMm <= 0 || weight <= 0) return
+    weights.set(diameterMm, (weights.get(diameterMm) ?? 0) + weight)
+  }
+
+  if (input.sourceMode === 'simple') {
+    add(input.pipeDiameterMm, 1)
+    return weights
+  }
+
+  for (const position of activePositions(input)) {
+    if (position.quantity <= 0) continue
+    const weight = position.quantity * (position.lengthMm > 0 ? position.lengthMm : 1)
+    add(position.pipeDiameterMm, weight)
+  }
+  return weights
+}
+
 function metalMassForInput(
   input: CostInput,
   plan: CuttingPlan | null | undefined,
-): { massKg: number; tubeCount: number; stockLengthMm: number } {
-  const stockLengthMm = input.metalStockLengthMm
-  const tubeCount =
-    input.sourceMode === 'simple'
-      ? input.simple.quantity
-      : plan
-        ? plan.barsCount
-        : input.metalTubeCount
+): MetalSummary {
+  if (!input.metalEnabled) {
+    return { massKg: 0, tubeCount: 0, stockLengthMm: 0, detail: '' }
+  }
 
-  if (!input.metalEnabled || tubeCount <= 0 || stockLengthMm <= 0) {
-    return { massKg: 0, tubeCount: 0, stockLengthMm }
+  if (input.sourceMode === 'positions') {
+    let massKg = 0
+    let pieceCount = 0
+    for (const position of input.manualPositions) {
+      if (position.quantity <= 0 || position.lengthMm <= 0 || position.pipeDiameterMm <= 0) {
+        continue
+      }
+      const lengthM = position.lengthMm * position.quantity * MM_TO_M
+      massKg += pipeMassKg(
+        position.pipeDiameterMm,
+        input.rates.wallThicknessMm,
+        lengthM,
+        input.rates.steelDensityKgM3,
+      )
+      pieceCount += position.quantity
+    }
+    const massTon = massKg / 1000
+    return {
+      massKg,
+      tubeCount: pieceCount,
+      stockLengthMm: 0,
+      detail: pieceCount > 0 ? `${pieceCount} шт · ${massTon.toFixed(3)} т` : '',
+    }
+  }
+
+  const stockLengthMm =
+    input.sourceMode === 'simple' ? input.simple.lengthMm : input.metalStockLengthMm
+  const tubeCount =
+    input.sourceMode === 'simple' ? input.simple.quantity : (plan?.barsCount ?? 0)
+
+  if (tubeCount <= 0 || stockLengthMm <= 0) {
+    return { massKg: 0, tubeCount: 0, stockLengthMm: 0, detail: '' }
+  }
+
+  const weights = metalDiameterWeights(input)
+  let totalWeight = 0
+  for (const weight of weights.values()) totalWeight += weight
+  if (totalWeight <= 0) {
+    return { massKg: 0, tubeCount: 0, stockLengthMm: 0, detail: '' }
   }
 
   const lengthM = stockLengthMm * MM_TO_M
-  const oneKg = pipeMassKg(
-    input.pipeDiameterMm,
-    input.rates.wallThicknessMm,
-    lengthM,
-    input.rates.steelDensityKgM3,
-  )
-  return { massKg: oneKg * tubeCount, tubeCount, stockLengthMm }
+  let massKg = 0
+  for (const [diameterMm, weight] of weights) {
+    const oneKg = pipeMassKg(
+      diameterMm,
+      input.rates.wallThicknessMm,
+      lengthM,
+      input.rates.steelDensityKgM3,
+    )
+    massKg += oneKg * tubeCount * (weight / totalWeight)
+  }
+  const massTon = massKg / 1000
+  return {
+    massKg,
+    tubeCount,
+    stockLengthMm,
+    detail: `${tubeCount} труб × ${stockLengthMm} мм · ${massTon.toFixed(3)} т`,
+  }
 }
 
 export function calculateCost(
@@ -114,7 +188,8 @@ export function calculateCost(
       : 0
   const paintLaborRub = paintLaborHours * workers * laborRatePerHour
 
-  const { massKg: metalMassKg, tubeCount, stockLengthMm } = metalMassForInput(input, plan)
+  const metal = metalMassForInput(input, plan)
+  const metalMassKg = metal.massKg
   const metalMassTon = metalMassKg / 1000
   const metalRub = metalMassTon * input.rates.pipePricePerTon
 
@@ -130,7 +205,7 @@ export function calculateCost(
   if (input.metalEnabled && metalRub > 0) {
     lines.push({
       label: 'Металл',
-      detail: `${tubeCount} труб × ${stockLengthMm} мм · ${metalMassTon.toFixed(3)} т`,
+      detail: metal.detail,
       rub: metalRub,
     })
   }
@@ -181,36 +256,46 @@ export function calculateCost(
 }
 
 export function validateCostInput(input: CostInput, plan?: CuttingPlan | null): void {
-  if (input.pipeDiameterMm <= 0) throw new Error('Укажите диаметр трубы')
   if (input.rates.wallThicknessMm <= 0) throw new Error('Укажите толщину стенки')
   if (input.rates.referenceDftUm <= 0) throw new Error('Эталонная толщина слоя должна быть > 0')
 
   if (input.sourceMode === 'simple') {
+    if (input.pipeDiameterMm <= 0) throw new Error('Укажите диаметр трубы')
     if (input.simple.quantity <= 0) throw new Error('Укажите количество труб')
     if (input.simple.lengthMm <= 0) throw new Error('Укажите длину трубы')
   }
 
   if (input.sourceMode === 'positions') {
-    const painted = input.positions.some((p) => p.paintLengthMm > 0 && p.quantity > 0)
+    const painted = input.manualPositions.some((p) => p.paintLengthMm > 0 && p.quantity > 0)
     if (!painted) throw new Error('Укажите позиции с длиной окраски > 0')
-    if (input.positions.some((p) => p.paintLengthMm > 0 && p.pipeDiameterMm <= 0)) {
+    if (input.manualPositions.some((p) => p.paintLengthMm > 0 && p.pipeDiameterMm <= 0)) {
       throw new Error('Укажите диаметр у каждой окрашиваемой позиции')
     }
   }
 
   if (input.sourceMode === 'fromCutting') {
     if (!plan) throw new Error('Сначала рассчитайте раскрой на вкладке «Раскрой»')
-    const painted = input.positions.some((p) => p.paintLengthMm > 0 && p.quantity > 0)
+    const painted = input.cuttingPositions.some((p) => p.paintLengthMm > 0 && p.quantity > 0)
     if (!painted) {
       throw new Error('Нажмите «Обновить из раскроя» и укажите длину окраски')
     }
-    if (input.positions.some((p) => p.paintLengthMm > 0 && p.pipeDiameterMm <= 0)) {
+    if (input.cuttingPositions.some((p) => p.paintLengthMm > 0 && p.pipeDiameterMm <= 0)) {
       throw new Error('Укажите диаметр у каждой окрашиваемой позиции')
     }
   }
 
-  if (input.metalEnabled && input.sourceMode !== 'fromCutting' && input.sourceMode !== 'simple') {
-    if (input.metalTubeCount <= 0) throw new Error('Укажите число труб для металла')
-    if (input.metalStockLengthMm <= 0) throw new Error('Укажите длину трубы для металла')
+  if (input.metalEnabled && input.sourceMode === 'positions') {
+    const withMetal = input.manualPositions.some(
+      (p) => p.quantity > 0 && p.lengthMm > 0 && p.pipeDiameterMm > 0,
+    )
+    if (!withMetal) {
+      throw new Error('Укажите позиции с Ø, длиной и количеством для расчёта металла')
+    }
+  }
+
+  if (input.metalEnabled && input.sourceMode === 'fromCutting') {
+    if (input.cuttingPositions.some((p) => p.quantity > 0 && p.pipeDiameterMm <= 0)) {
+      throw new Error('Укажите диаметр у каждой позиции для расчёта металла')
+    }
   }
 }

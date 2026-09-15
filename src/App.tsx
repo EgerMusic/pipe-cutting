@@ -46,16 +46,8 @@ function initialCostInput(job: JobInput): CostInput {
       lengthMm: 12000,
       paintLengthMm: 12000,
     },
-    positions: [
-      {
-        id: crypto.randomUUID(),
-        name: 'Свая',
-        pipeDiameterMm: 325,
-        lengthMm: 8400,
-        quantity: 10,
-        paintLengthMm: 3000,
-      },
-    ],
+    manualPositions: [],
+    cuttingPositions: [],
     metalEnabled: true,
     metalTubeCount: 100,
     metalStockLengthMm: 12000,

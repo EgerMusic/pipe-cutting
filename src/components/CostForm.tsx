@@ -47,20 +47,28 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
   const updateSimple = (patch: Partial<CostInput['simple']>) =>
     onChange({ ...value, simple: { ...value.simple, ...patch } })
 
-  const updatePosition = (id: string, patch: Partial<CostPosition>) => {
+  const updateManualPosition = (id: string, patch: Partial<CostPosition>) => {
     onChange({
       ...value,
-      positions: value.positions.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+      manualPositions: value.manualPositions.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    })
+  }
+
+  const updateCuttingPosition = (id: string, patch: Partial<CostPosition>) => {
+    onChange({
+      ...value,
+      cuttingPositions: value.cuttingPositions.map((p) => (p.id === id ? { ...p, ...patch } : p)),
     })
   }
 
   const setMode = (sourceMode: PaintSourceMode) => {
     const next: CostInput = { ...value, sourceMode }
     if (sourceMode === 'fromCutting' && plan) {
-      next.positions = paintPositionsFromJob(job)
+      next.cuttingPositions = paintPositionsFromJob(job)
       next.metalEnabled = true
       next.metalTubeCount = plan.barsCount
       next.metalStockLengthMm = job.stockLength
+      next.pipeDiameterMm = job.pipeDiameter
     }
     onChange(next)
   }
@@ -170,7 +178,10 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
               onClick={() =>
                 onChange({
                   ...value,
-                  positions: [...value.positions, newPosition(job.pipeDiameter || value.pipeDiameterMm)],
+                  manualPositions: [
+                    ...value.manualPositions,
+                    newPosition(job.pipeDiameter || value.pipeDiameterMm),
+                  ],
                 })
               }
             >
@@ -178,25 +189,25 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
             </button>
           </div>
           <div className="table-wrap">
-            <table>
+            <table className="cost-positions-table">
               <thead>
                 <tr>
-                  <th>Название</th>
-                  <th>Ø, мм</th>
-                  <th>Длина, мм</th>
-                  <th>Кол-во</th>
-                  <th>Окраска, мм</th>
-                  <th />
+                  <th className="col-name">Название</th>
+                  <th className="col-num">Ø, мм</th>
+                  <th className="col-num">Длина, мм</th>
+                  <th className="col-num">Кол-во</th>
+                  <th className="col-num">Окраска, мм</th>
+                  <th className="col-del" />
                 </tr>
               </thead>
               <tbody>
-                {value.positions.map((piece) => (
+                {value.manualPositions.map((piece) => (
                   <tr key={piece.id}>
                     <td>
                       <input
                         type="text"
                         value={piece.name}
-                        onChange={(e) => updatePosition(piece.id, { name: e.target.value })}
+                        onChange={(e) => updateManualPosition(piece.id, { name: e.target.value })}
                       />
                     </td>
                     <td>
@@ -205,7 +216,9 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                         min={1}
                         value={numInputValue(piece.pipeDiameterMm)}
                         onChange={(e) =>
-                          updatePosition(piece.id, { pipeDiameterMm: parseNum(e.target.value) })
+                          updateManualPosition(piece.id, {
+                            pipeDiameterMm: parseNum(e.target.value),
+                          })
                         }
                       />
                     </td>
@@ -215,7 +228,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                         min={1}
                         value={numInputValue(piece.lengthMm)}
                         onChange={(e) =>
-                          updatePosition(piece.id, { lengthMm: parseNum(e.target.value) })
+                          updateManualPosition(piece.id, { lengthMm: parseNum(e.target.value) })
                         }
                       />
                     </td>
@@ -225,7 +238,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                         min={1}
                         value={numInputValue(piece.quantity)}
                         onChange={(e) =>
-                          updatePosition(piece.id, { quantity: parseNum(e.target.value) })
+                          updateManualPosition(piece.id, { quantity: parseNum(e.target.value) })
                         }
                       />
                     </td>
@@ -235,7 +248,9 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                         min={0}
                         value={numInputValue(piece.paintLengthMm)}
                         onChange={(e) =>
-                          updatePosition(piece.id, { paintLengthMm: parseNum(e.target.value) })
+                          updateManualPosition(piece.id, {
+                            paintLengthMm: parseNum(e.target.value),
+                          })
                         }
                       />
                     </td>
@@ -243,11 +258,11 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                       <button
                         type="button"
                         className="danger ghost"
-                        disabled={value.positions.length <= 1}
+                        disabled={value.manualPositions.length <= 1}
                         onClick={() =>
                           onChange({
                             ...value,
-                            positions: value.positions.filter((p) => p.id !== piece.id),
+                            manualPositions: value.manualPositions.filter((p) => p.id !== piece.id),
                           })
                         }
                       >
@@ -276,7 +291,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
               onClick={() =>
                 onChange({
                   ...value,
-                  positions: paintPositionsFromJob(job),
+                  cuttingPositions: paintPositionsFromJob(job),
                   metalTubeCount: plan.barsCount,
                   metalStockLengthMm: job.stockLength,
                   pipeDiameterMm: job.pipeDiameter,
@@ -298,7 +313,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                 </tr>
               </thead>
               <tbody>
-                {value.positions.map((piece) => (
+                {value.cuttingPositions.map((piece) => (
                   <tr key={piece.id}>
                     <td>{piece.name || '—'}</td>
                     <td>
@@ -307,7 +322,9 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                         min={1}
                         value={numInputValue(piece.pipeDiameterMm)}
                         onChange={(e) =>
-                          updatePosition(piece.id, { pipeDiameterMm: parseNum(e.target.value) })
+                          updateCuttingPosition(piece.id, {
+                            pipeDiameterMm: parseNum(e.target.value),
+                          })
                         }
                       />
                     </td>
@@ -319,7 +336,9 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                         min={0}
                         value={numInputValue(piece.paintLengthMm)}
                         onChange={(e) =>
-                          updatePosition(piece.id, { paintLengthMm: parseNum(e.target.value) })
+                          updateCuttingPosition(piece.id, {
+                            paintLengthMm: parseNum(e.target.value),
+                          })
                         }
                       />
                     </td>
@@ -341,26 +360,9 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
       </label>
 
       {value.metalEnabled && value.sourceMode === 'positions' && (
-        <div className="grid-2 nest-box" style={{ marginBottom: 16 }}>
-          <label>
-            Труб, шт
-            <input
-              type="number"
-              min={1}
-              value={numInputValue(value.metalTubeCount)}
-              onChange={(e) => update({ metalTubeCount: parseNum(e.target.value) })}
-            />
-          </label>
-          <label>
-            Длина трубы, мм
-            <input
-              type="number"
-              min={1}
-              value={numInputValue(value.metalStockLengthMm)}
-              onChange={(e) => update({ metalStockLengthMm: parseNum(e.target.value) })}
-            />
-          </label>
-        </div>
+        <p className="hint" style={{ marginTop: '-4px', marginBottom: 12 }}>
+          Масса металла считается по каждой позиции: Ø × длина × кол-во.
+        </p>
       )}
 
       <button

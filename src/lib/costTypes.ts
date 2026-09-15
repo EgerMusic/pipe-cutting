@@ -43,7 +43,10 @@ export type CostInput = {
   sourceMode: PaintSourceMode
   rates: CostRates
   simple: CostSimpleInput
-  positions: CostPosition[]
+  /** Ручной ввод на вкладке «По позициям». */
+  manualPositions: CostPosition[]
+  /** Позиции из раскроя на вкладке «Из раскроя». */
+  cuttingPositions: CostPosition[]
   metalEnabled: boolean
   /** Число труб 12 м для металла (простой режим или вручную). */
   metalTubeCount: number

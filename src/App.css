@@ -670,3 +670,27 @@ tr.cost-total-row td {
   border-top: 2px solid var(--line-strong);
   padding-top: 12px;
 }
+
+table.cost-positions-table {
+  table-layout: fixed;
+}
+
+table.cost-positions-table .col-name {
+  width: 26%;
+}
+
+table.cost-positions-table .col-num {
+  width: 96px;
+}
+
+table.cost-positions-table .col-del {
+  width: 44px;
+  text-align: center;
+}
+
+table.cost-positions-table input[type='number'],
+table.cost-positions-table input[type='text'] {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
