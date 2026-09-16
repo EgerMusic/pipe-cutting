@@ -27,7 +27,7 @@ export function PlanCard({ plan, input }: Props) {
     .filter(({ pattern }) => pattern.remnant > 0)
 
   return (
-    <section className="card plan">
+    <section className="card plan cutting-card">
       <div className="plan-head">
         <div>
           <p className="hero-mark" style={{ marginBottom: 6 }}>

@@ -1,3 +1,4 @@
+import { VAT_PERCENT } from './costDefaults'
 import type { CostEstimate, CostInput, CostLine, CostPosition, CostRates } from './costTypes'
 import type { CuttingPlan, JobInput } from './types'
 import { pieceDiameter } from './types'
@@ -69,9 +70,52 @@ function totalPaintAreaM2(positions: CostPosition[]): number {
 }
 
 function paintConsumptionKgPerM2(rates: CostRates): number {
-  if (rates.referenceDftUm <= 0) return 0
-  const scale = rates.targetDftUm / rates.referenceDftUm
-  return rates.consumptionKgPerM2AtRef * scale * (1 + rates.paintWastePercent / 100)
+  return rates.consumptionKgPerM2 > 0 ? rates.consumptionKgPerM2 : 0
+}
+
+export function totalPieceCount(input: CostInput): number {
+  if (input.sourceMode === 'simple') return input.simple.quantity
+  return activePositions(input).reduce((sum, position) => sum + Math.max(0, position.quantity), 0)
+}
+
+type ProductionLaborSummary = {
+  shiftsRequired: number
+  operatorRub: number
+  setupRub: number
+  totalRub: number
+}
+
+function productionLaborForInput(input: CostInput, pieceCount: number): ProductionLaborSummary {
+  const {
+    operatorsCount,
+    setupWorkersCount,
+    operatorSalaryMonthly,
+    setupWorkerSalaryMonthly,
+    productivityPiecesPerShift,
+    shiftsPerMonth,
+  } = input.rates
+
+  if (
+    pieceCount <= 0 ||
+    productivityPiecesPerShift <= 0 ||
+    shiftsPerMonth <= 0 ||
+    (operatorsCount <= 0 && setupWorkersCount <= 0)
+  ) {
+    return { shiftsRequired: 0, operatorRub: 0, setupRub: 0, totalRub: 0 }
+  }
+
+  const shiftsRequired = Math.ceil(pieceCount / productivityPiecesPerShift)
+  const operatorRub =
+    shiftsRequired * ((operatorsCount * operatorSalaryMonthly) / shiftsPerMonth)
+  const setupRub =
+    shiftsRequired * ((setupWorkersCount * setupWorkerSalaryMonthly) / shiftsPerMonth)
+
+  return {
+    shiftsRequired,
+    operatorRub,
+    setupRub,
+    totalRub: operatorRub + setupRub,
+  }
 }
 
 type MetalSummary = {
@@ -181,24 +225,29 @@ export function calculateCost(
   const paintKg = paintAreaM2 * kgPerM2
   const paintMaterialRub = paintKg * input.rates.enamelPricePerKg
 
-  const { workers, productivityM2PerPersonHour, laborRatePerHour } = input.rates
-  const paintLaborHours =
-    workers > 0 && productivityM2PerPersonHour > 0
-      ? paintAreaM2 / (workers * productivityM2PerPersonHour)
+  const pieceCount = totalPieceCount(input)
+  const production = productionLaborForInput(input, pieceCount)
+  const operatorLaborRub = production.operatorRub
+  const setupLaborRub = production.setupRub
+  const productionLaborRub = production.totalRub
+  const shiftsRequired = production.shiftsRequired
+
+  const { paintersCount, painterSalaryMonthly, shiftsPerMonth } = input.rates
+  const paintLaborRub =
+    paintersCount > 0 && shiftsRequired > 0 && shiftsPerMonth > 0
+      ? shiftsRequired * ((paintersCount * painterSalaryMonthly) / shiftsPerMonth)
       : 0
-  const paintLaborRub = paintLaborHours * workers * laborRatePerHour
 
   const metal = metalMassForInput(input, plan)
   const metalMassKg = metal.massKg
   const metalMassTon = metalMassKg / 1000
   const metalRub = metalMassTon * input.rates.pipePricePerTon
 
-  const cutLaborRub = input.rates.cutLaborHours * input.rates.cutLaborRatePerHour
+  const overheadRub = metalRub * (input.rates.overheadPercent / 100)
 
-  const overheadBase = metalRub + paintMaterialRub
-  const overheadRub = overheadBase * (input.rates.overheadPercent / 100)
-
-  const totalRub = metalRub + paintMaterialRub + paintLaborRub + cutLaborRub + overheadRub
+  const totalRub = metalRub + paintMaterialRub + paintLaborRub + productionLaborRub + overheadRub
+  const vatRub = totalRub * (VAT_PERCENT / 100)
+  const totalRubWithVat = totalRub + vatRub
 
   const lines: CostLine[] = []
 
@@ -210,31 +259,42 @@ export function calculateCost(
     })
   }
 
-  if (paintMaterialRub > 0 || paintAreaM2 > 0) {
+  if (paintMaterialRub > 0) {
     lines.push({
       label: 'Эмаль',
       detail: `${paintAreaM2.toFixed(1)} м² · ${paintKg.toFixed(1)} кг`,
       rub: paintMaterialRub,
     })
+  }
+
+  if (paintLaborRub > 0) {
     lines.push({
-      label: 'Покраска, работа',
-      detail: `${workers} чел. · ${paintLaborHours.toFixed(1)} ч`,
+      label: 'Нанесение АКЗ',
+      detail: `${shiftsRequired} смен · ${paintersCount} мал.`,
       rub: paintLaborRub,
     })
   }
 
-  if (cutLaborRub > 0) {
+  if (operatorLaborRub > 0) {
     lines.push({
-      label: 'Резка, работа',
-      detail: `${input.rates.cutLaborHours} ч × ${input.rates.cutLaborRatePerHour} ₽/ч`,
-      rub: cutLaborRub,
+      label: 'Операторы',
+      detail: `${shiftsRequired} смен · ${input.rates.operatorsCount} чел.`,
+      rub: operatorLaborRub,
+    })
+  }
+
+  if (setupLaborRub > 0) {
+    lines.push({
+      label: 'Наладчики',
+      detail: `${shiftsRequired} смен · ${input.rates.setupWorkersCount} чел.`,
+      rub: setupLaborRub,
     })
   }
 
   if (overheadRub > 0) {
     lines.push({
-      label: 'Накладные (рез, сварка, расходники)',
-      detail: `${input.rates.overheadPercent}% от металл + эмаль`,
+      label: 'Накладные (сварка, расходники)',
+      detail: `${input.rates.overheadPercent}% от металл`,
       rub: overheadRub,
     })
   }
@@ -243,21 +303,31 @@ export function calculateCost(
     paintAreaM2,
     paintKg,
     paintMaterialRub,
-    paintLaborHours,
     paintLaborRub,
     metalMassKg,
     metalMassTon,
     metalRub,
+    operatorLaborRub,
+    setupLaborRub,
+    productionLaborRub,
+    pieceCount,
+    shiftsRequired,
     overheadRub,
-    cutLaborRub,
     totalRub,
+    vatRub,
+    totalRubWithVat,
+    vatPercent: VAT_PERCENT,
     lines,
   }
 }
 
 export function validateCostInput(input: CostInput, plan?: CuttingPlan | null): void {
   if (input.rates.wallThicknessMm <= 0) throw new Error('Укажите толщину стенки')
-  if (input.rates.referenceDftUm <= 0) throw new Error('Эталонная толщина слоя должна быть > 0')
+  if (input.rates.consumptionKgPerM2 <= 0) throw new Error('Укажите расход краски, кг/м²')
+  if (input.rates.productivityPiecesPerShift <= 0) {
+    throw new Error('Укажите производительность, шт/смену')
+  }
+  if (input.rates.shiftsPerMonth <= 0) throw new Error('Укажите число смен в месяце')
 
   if (input.sourceMode === 'simple') {
     if (input.pipeDiameterMm <= 0) throw new Error('Укажите диаметр трубы')
@@ -267,7 +337,7 @@ export function validateCostInput(input: CostInput, plan?: CuttingPlan | null): 
 
   if (input.sourceMode === 'positions') {
     const painted = input.manualPositions.some((p) => p.paintLengthMm > 0 && p.quantity > 0)
-    if (!painted) throw new Error('Укажите позиции с длиной окраски > 0')
+    if (!painted) throw new Error('Укажите позиции с длиной нанесения АКЗ > 0')
     if (input.manualPositions.some((p) => p.paintLengthMm > 0 && p.pipeDiameterMm <= 0)) {
       throw new Error('Укажите диаметр у каждой окрашиваемой позиции')
     }
@@ -277,7 +347,7 @@ export function validateCostInput(input: CostInput, plan?: CuttingPlan | null): 
     if (!plan) throw new Error('Сначала рассчитайте раскрой на вкладке «Раскрой»')
     const painted = input.cuttingPositions.some((p) => p.paintLengthMm > 0 && p.quantity > 0)
     if (!painted) {
-      throw new Error('Нажмите «Обновить из раскроя» и укажите длину окраски')
+      throw new Error('Нажмите «Обновить из раскроя» и укажите длину нанесения АКЗ')
     }
     if (input.cuttingPositions.some((p) => p.paintLengthMm > 0 && p.pipeDiameterMm <= 0)) {
       throw new Error('Укажите диаметр у каждой окрашиваемой позиции')

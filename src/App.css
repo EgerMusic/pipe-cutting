@@ -335,6 +335,29 @@ button.calculate {
   font-weight: 800;
 }
 
+.cutting-card h2.section-title,
+.cutting-card h3.section-title {
+  font-size: 20px;
+  letter-spacing: 0.05em;
+}
+
+.cutting-card .plan-head h2 {
+  font-size: 26px;
+}
+
+.cutting-card th {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.cutting-card .bar-meta strong {
+  font-size: 15px;
+}
+
+.cutting-card .bar-meta-stat-label {
+  font-size: 11px;
+}
+
 .plan-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -401,8 +424,28 @@ button.calculate {
   line-height: 1.2;
 }
 
+.plan-summary-cost {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .plan-summary-cost {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .plan-summary-cost {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .plan-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-summary-cost {
     grid-template-columns: 1fr;
   }
 }
@@ -693,4 +736,70 @@ table.cost-positions-table input[type='text'] {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.cost-rates {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cost-rates-group {
+  margin: 0;
+}
+
+.cost-rates-title {
+  margin: 0 0 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+table.cost-rates-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.cost-rates-table th {
+  width: 42%;
+  padding: 10px 12px 10px 0;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+table.cost-rates-table td {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+table.cost-rates-table tr:last-child th,
+table.cost-rates-table tr:last-child td {
+  border-bottom: none;
+}
+
+table.cost-rates-table input[type='number'] {
+  width: 100%;
+  max-width: 160px;
+  box-sizing: border-box;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
+table.cost-rates-table .cost-rates-unit {
+  width: 80px;
+  padding-left: 10px;
+  font-size: 14px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }

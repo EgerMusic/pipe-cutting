@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { paintPositionsFromJob } from '../lib/cost'
-import { PLACEHOLDER_COST_RATES } from '../lib/costDefaults'
 import { saveCostRates } from '../lib/costStorage'
 import type { CostInput, CostPosition, CostRates, PaintSourceMode } from '../lib/costTypes'
 import type { CuttingPlan, JobInput } from '../lib/types'
@@ -73,12 +72,6 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
     onChange(next)
   }
 
-  const resetRates = () => {
-    const rates = { ...PLACEHOLDER_COST_RATES }
-    onChange({ ...value, rates })
-    saveCostRates(rates)
-  }
-
   return (
     <section className="card">
       <h2 className="section-title">Смета изготовления</h2>
@@ -96,7 +89,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
       )}
 
       <p className="hint" style={{ marginTop: value.sourceMode === 'simple' ? '-8px' : 0, marginBottom: 12 }}>
-        Окраска — только наружная поверхность. В режиме «По позициям» Ø задаётся в каждой строке.
+        Нанесение АКЗ — только наружная поверхность. В режиме «По позициям» Ø задаётся в каждой строке.
       </p>
 
       <div className="cost-mode">
@@ -155,7 +148,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
             />
           </label>
           <label>
-            Окраска, мм
+            АКЗ, мм
             <input
               type="number"
               min={0}
@@ -196,7 +189,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                   <th className="col-num">Ø, мм</th>
                   <th className="col-num">Длина, мм</th>
                   <th className="col-num">Кол-во</th>
-                  <th className="col-num">Окраска, мм</th>
+                  <th className="col-num">АКЗ, мм</th>
                   <th className="col-del" />
                 </tr>
               </thead>
@@ -281,8 +274,8 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
         <>
           <div className="nest-box" style={{ marginBottom: 12 }}>
             <p className="hint" style={{ margin: 0 }}>
-              Металл: {plan.barsCount} труб × {job.stockLength} мм. Укажите длину окраски по каждой
-              позиции (не обязательно на всю длину сваи).
+              Металл: {plan.barsCount} труб × {job.stockLength} мм. Укажите длину нанесения АКЗ по
+              каждой позиции (не обязательно на всю длину сваи).
             </p>
             <button
               type="button"
@@ -309,7 +302,7 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
                   <th>Ø, мм</th>
                   <th>Длина, мм</th>
                   <th>Кол-во</th>
-                  <th>Окраска, мм</th>
+                  <th>АКЗ, мм</th>
                 </tr>
               </thead>
               <tbody>
@@ -375,137 +368,217 @@ export function CostForm({ value, onChange, onCalculate, error, job, plan }: Pro
       </button>
 
       {ratesOpen && (
-        <div className="nest-box" style={{ marginBottom: 16 }}>
-          <div className="grid-3">
-            <label>
-              Труба, ₽/т
-              <input
-                type="number"
-                min={0}
-                value={numInputValue(value.rates.pipePricePerTon)}
-                onChange={(e) => updateRates({ pipePricePerTon: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Стенка, мм
-              <input
-                type="number"
-                min={0.1}
-                step={0.1}
-                value={numInputValue(value.rates.wallThicknessMm)}
-                onChange={(e) => updateRates({ wallThicknessMm: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Накладные, %
-              <input
-                type="number"
-                min={0}
-                value={numInputValue(value.rates.overheadPercent)}
-                onChange={(e) => updateRates({ overheadPercent: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Расход при эталоне, кг/м²
-              <input
-                type="number"
-                min={0}
-                step={0.01}
-                value={numInputValue(value.rates.consumptionKgPerM2AtRef)}
-                onChange={(e) =>
-                  updateRates({ consumptionKgPerM2AtRef: parseNum(e.target.value) })
-                }
-              />
-            </label>
-            <label>
-              Эталон DFT, мкм
-              <input
-                type="number"
-                min={1}
-                value={numInputValue(value.rates.referenceDftUm)}
-                onChange={(e) => updateRates({ referenceDftUm: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              DFT заказа, мкм
-              <input
-                type="number"
-                min={1}
-                value={numInputValue(value.rates.targetDftUm)}
-                onChange={(e) => updateRates({ targetDftUm: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Эмаль, ₽/кг
-              <input
-                type="number"
-                min={0}
-                value={numInputValue(value.rates.enamelPricePerKg)}
-                onChange={(e) => updateRates({ enamelPricePerKg: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Потери, %
-              <input
-                type="number"
-                min={0}
-                value={numInputValue(value.rates.paintWastePercent)}
-                onChange={(e) => updateRates({ paintWastePercent: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Людей, чел.
-              <input
-                type="number"
-                min={1}
-                value={numInputValue(value.rates.workers)}
-                onChange={(e) => updateRates({ workers: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Производительность, м²/чел·ч
-              <input
-                type="number"
-                min={0.1}
-                step={0.1}
-                value={numInputValue(value.rates.productivityM2PerPersonHour)}
-                onChange={(e) =>
-                  updateRates({ productivityM2PerPersonHour: parseNum(e.target.value) })
-                }
-              />
-            </label>
-            <label>
-              Ставка, ₽/ч
-              <input
-                type="number"
-                min={0}
-                value={numInputValue(value.rates.laborRatePerHour)}
-                onChange={(e) => updateRates({ laborRatePerHour: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Резка, ч
-              <input
-                type="number"
-                min={0}
-                step={0.5}
-                value={numInputValue(value.rates.cutLaborHours)}
-                onChange={(e) => updateRates({ cutLaborHours: parseNum(e.target.value) })}
-              />
-            </label>
-            <label>
-              Резка, ₽/ч
-              <input
-                type="number"
-                min={0}
-                value={numInputValue(value.rates.cutLaborRatePerHour)}
-                onChange={(e) => updateRates({ cutLaborRatePerHour: parseNum(e.target.value) })}
-              />
-            </label>
-          </div>
-          <button type="button" className="secondary" style={{ marginTop: 12 }} onClick={resetRates}>
-            Сбросить расценки к заглушкам
-          </button>
+        <div className="nest-box cost-rates" style={{ marginBottom: 16 }}>
+          <section className="cost-rates-group">
+            <h4 className="cost-rates-title">Металл</h4>
+            <table className="cost-rates-table">
+              <tbody>
+                <tr>
+                  <th>Труба</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.pipePricePerTon)}
+                      onChange={(e) => updateRates({ pipePricePerTon: parseNum(e.target.value) })}
+                    />
+                  </td>
+                  <td className="cost-rates-unit">₽/т</td>
+                </tr>
+                <tr>
+                  <th>Стенка</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={numInputValue(value.rates.wallThicknessMm)}
+                      onChange={(e) => updateRates({ wallThicknessMm: parseNum(e.target.value) })}
+                    />
+                  </td>
+                  <td className="cost-rates-unit">мм</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="cost-rates-group">
+            <h4 className="cost-rates-title">АКЗ</h4>
+            <table className="cost-rates-table">
+              <tbody>
+                <tr>
+                  <th>Расход</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={numInputValue(value.rates.consumptionKgPerM2)}
+                      onChange={(e) =>
+                        updateRates({ consumptionKgPerM2: parseNum(e.target.value) })
+                      }
+                    />
+                  </td>
+                  <td className="cost-rates-unit">кг/м²</td>
+                </tr>
+                <tr>
+                  <th>Цена материала</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.enamelPricePerKg)}
+                      onChange={(e) => updateRates({ enamelPricePerKg: parseNum(e.target.value) })}
+                    />
+                  </td>
+                  <td className="cost-rates-unit">₽/кг</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="cost-rates-group">
+            <h4 className="cost-rates-title">Смены и производительность</h4>
+            <table className="cost-rates-table">
+              <tbody>
+                <tr>
+                  <th>Производительность</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step={0.1}
+                      value={numInputValue(value.rates.productivityPiecesPerShift)}
+                      onChange={(e) =>
+                        updateRates({ productivityPiecesPerShift: parseNum(e.target.value) })
+                      }
+                    />
+                  </td>
+                  <td className="cost-rates-unit">шт/смену</td>
+                </tr>
+                <tr>
+                  <th>Смен в месяце</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={1}
+                      value={numInputValue(value.rates.shiftsPerMonth)}
+                      onChange={(e) => updateRates({ shiftsPerMonth: parseNum(e.target.value) })}
+                    />
+                  </td>
+                  <td className="cost-rates-unit">шт</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="cost-rates-group">
+            <h4 className="cost-rates-title">Персонал</h4>
+            <table className="cost-rates-table">
+              <tbody>
+                <tr>
+                  <th>Операторов</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.operatorsCount)}
+                      onChange={(e) => updateRates({ operatorsCount: parseNum(e.target.value) })}
+                    />
+                  </td>
+                  <td className="cost-rates-unit">чел.</td>
+                </tr>
+                <tr>
+                  <th>Оклад оператора</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.operatorSalaryMonthly)}
+                      onChange={(e) =>
+                        updateRates({ operatorSalaryMonthly: parseNum(e.target.value) })
+                      }
+                    />
+                  </td>
+                  <td className="cost-rates-unit">₽/мес</td>
+                </tr>
+                <tr>
+                  <th>Наладчиков</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.setupWorkersCount)}
+                      onChange={(e) =>
+                        updateRates({ setupWorkersCount: parseNum(e.target.value) })
+                      }
+                    />
+                  </td>
+                  <td className="cost-rates-unit">чел.</td>
+                </tr>
+                <tr>
+                  <th>Оклад наладчика</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.setupWorkerSalaryMonthly)}
+                      onChange={(e) =>
+                        updateRates({ setupWorkerSalaryMonthly: parseNum(e.target.value) })
+                      }
+                    />
+                  </td>
+                  <td className="cost-rates-unit">₽/мес</td>
+                </tr>
+                <tr>
+                  <th>Маляров</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.paintersCount)}
+                      onChange={(e) => updateRates({ paintersCount: parseNum(e.target.value) })}
+                    />
+                  </td>
+                  <td className="cost-rates-unit">чел.</td>
+                </tr>
+                <tr>
+                  <th>Оклад маляра</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.painterSalaryMonthly)}
+                      onChange={(e) =>
+                        updateRates({ painterSalaryMonthly: parseNum(e.target.value) })
+                      }
+                    />
+                  </td>
+                  <td className="cost-rates-unit">₽/мес</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="cost-rates-group">
+            <h4 className="cost-rates-title">Накладные</h4>
+            <table className="cost-rates-table">
+              <tbody>
+                <tr>
+                  <th>Накладные</th>
+                  <td>
+                    <input
+                      type="number"
+                      min={0}
+                      value={numInputValue(value.rates.overheadPercent)}
+                      onChange={(e) => updateRates({ overheadPercent: parseNum(e.target.value) })}
+                    />
+                  </td>
+                  <td className="cost-rates-unit">%</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
         </div>
       )}
 

@@ -16,20 +16,27 @@ export type CostRates = {
   wallThicknessMm: number
   steelDensityKgM3: number
 
-  consumptionKgPerM2AtRef: number
-  referenceDftUm: number
-  targetDftUm: number
+  /** Расход краски, кг/м² (без привязки к толщине — позже из справочника). */
+  consumptionKgPerM2: number
   enamelPricePerKg: number
-  paintWastePercent: number
 
-  workers: number
-  productivityM2PerPersonHour: number
-  laborRatePerHour: number
+  paintersCount: number
+  /** Оклад маляра, ₽/мес. */
+  painterSalaryMonthly: number
 
-  /** % от металл + материал краски (рез, сварка, расходники). */
+  operatorsCount: number
+  setupWorkersCount: number
+  /** Оклад оператора, ₽/мес. */
+  operatorSalaryMonthly: number
+  /** Оклад наладчика, ₽/мес. */
+  setupWorkerSalaryMonthly: number
+  /** Выработка, шт/смену (труб). */
+  productivityPiecesPerShift: number
+  /** Рабочих смен в месяце (для перевода оклада в ₽/смену). */
+  shiftsPerMonth: number
+
+  /** % от металл + материал краски (сварка, расходники). */
   overheadPercent: number
-  cutLaborHours: number
-  cutLaborRatePerHour: number
 }
 
 export type CostSimpleInput = {
@@ -64,13 +71,20 @@ export type CostEstimate = {
   paintAreaM2: number
   paintKg: number
   paintMaterialRub: number
-  paintLaborHours: number
   paintLaborRub: number
   metalMassKg: number
   metalMassTon: number
   metalRub: number
+  operatorLaborRub: number
+  setupLaborRub: number
+  productionLaborRub: number
+  pieceCount: number
+  shiftsRequired: number
   overheadRub: number
-  cutLaborRub: number
+  /** Сумма без НДС. */
   totalRub: number
+  vatRub: number
+  totalRubWithVat: number
+  vatPercent: number
   lines: CostLine[]
 }

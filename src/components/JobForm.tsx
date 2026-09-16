@@ -69,7 +69,7 @@ export function JobForm({ value, onChange, onCalculate, error }: Props) {
       : 0
 
   return (
-    <section className="card">
+    <section className="card cutting-card">
       <h2 className="section-title">Параметры раскроя</h2>
 
       <label style={{ marginBottom: 16, maxWidth: 320 }}>

@@ -396,15 +396,20 @@ export async function downloadCostPdf(estimate: CostEstimate, input: CostInput) 
             <div>Режим: ${escapeHtml(COST_MODE_LABEL[input.sourceMode])}</div>
           </div>
         </div>
-        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+        <div style="margin-top:14px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;">
           <div style="border:1px solid #b45309;background:#fffbeb;padding:10px 12px;font-family:Consolas,monospace;">
-            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#b45309;margin-bottom:6px;">Итого</div>
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#b45309;margin-bottom:6px;">Итого с НДС</div>
             <div style="display:flex;align-items:baseline;gap:8px;min-height:34px;">
-              <strong style="font-size:22px;color:#92400e;line-height:1;">${escapeHtml(formatRub(estimate.totalRub))}</strong>
+              <strong style="font-size:22px;color:#92400e;line-height:1;">${escapeHtml(formatRub(estimate.totalRubWithVat))}</strong>
             </div>
-            <div style="min-height:18px;font-size:12px;color:#b45309;margin-top:2px;">${
-              estimate.paintAreaM2 > 0 ? `${estimate.paintAreaM2.toFixed(1)} м² окраски` : '—'
-            }</div>
+            <div style="min-height:18px;font-size:12px;color:#b45309;margin-top:2px;">без НДС ${escapeHtml(formatRub(estimate.totalRub))}</div>
+          </div>
+          <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Смены</div>
+            <div style="min-height:34px;display:flex;align-items:flex-end;">
+              <strong style="font-size:22px;color:#0f766e;line-height:1;">${estimate.shiftsRequired}</strong>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#64748b;margin-top:2px;opacity:0;">—</div>
           </div>
           <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
             <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Металл</div>
@@ -416,12 +421,21 @@ export async function downloadCostPdf(estimate: CostEstimate, input: CostInput) 
             }</div>
           </div>
           <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
-            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Окраска</div>
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Эмаль</div>
             <div style="min-height:34px;display:flex;align-items:flex-end;">
-              <strong style="font-size:22px;color:#0f766e;line-height:1;">${escapeHtml(formatRub(estimate.paintMaterialRub + estimate.paintLaborRub))}</strong>
+              <strong style="font-size:22px;color:#0f766e;line-height:1;">${escapeHtml(formatRub(estimate.paintMaterialRub))}</strong>
             </div>
             <div style="min-height:18px;font-size:12px;color:#64748b;margin-top:2px;">${
-              estimate.paintKg > 0 ? `${estimate.paintKg.toFixed(1)} кг эмали` : '—'
+              estimate.paintKg > 0 ? `${estimate.paintKg.toFixed(1)} кг` : '—'
+            }</div>
+          </div>
+          <div style="border:1px solid #0f766e;background:#f0fdfa;padding:10px 12px;font-family:Consolas,monospace;">
+            <div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#0f766e;margin-bottom:6px;">Нанесение АКЗ</div>
+            <div style="min-height:34px;display:flex;align-items:flex-end;">
+              <strong style="font-size:22px;color:#0f766e;line-height:1;">${escapeHtml(formatRub(estimate.paintLaborRub))}</strong>
+            </div>
+            <div style="min-height:18px;font-size:12px;color:#64748b;margin-top:2px;">${
+              estimate.paintAreaM2 > 0 ? `${estimate.paintAreaM2.toFixed(1)} м²` : '—'
             }</div>
           </div>
         </div>
@@ -463,8 +477,16 @@ export async function downloadCostPdf(estimate: CostEstimate, input: CostInput) 
           <tbody>
             ${rows}
             <tr>
-              <td style="${td};border-top:2px solid #334155;" colspan="2"><strong>Стоимость изготовления</strong></td>
+              <td style="${td};border-top:2px solid #334155;" colspan="2"><strong>Итого без НДС</strong></td>
               <td style="${tdRub};border-top:2px solid #334155;"><strong>${escapeHtml(formatRub(estimate.totalRub))}</strong></td>
+            </tr>
+            <tr>
+              <td style="${td}" colspan="2">НДС ${estimate.vatPercent}%</td>
+              <td style="${tdRub}">${escapeHtml(formatRub(estimate.vatRub))}</td>
+            </tr>
+            <tr>
+              <td style="${td};border-top:2px solid #334155;" colspan="2"><strong>Итого с НДС</strong></td>
+              <td style="${tdRub};border-top:2px solid #334155;"><strong>${escapeHtml(formatRub(estimate.totalRubWithVat))}</strong></td>
             </tr>
           </tbody>
         </table>
